@@ -1,0 +1,53 @@
+name: iOS sideload build
+
+# Builds an UNSIGNED .ipa for personal sideloading (e.g. Sideloadly on
+# Windows, which re-signs it with your own Apple ID). Run it manually from
+# the Actions tab and enter the URL your iPhone should use to reach the API.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Saige API URL reachable from the iPhone (e.g. http://192.168.1.20:8000 or https://vault.example.com)"
+        required: true
+        default: "http://192.168.1.20:8000"
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+      - name: Validate API URL
+        env:
+          API_URL: ${{ inputs.api_base_url }}
+        run: |
+          [[ "$API_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || { echo "Invalid URL: $API_URL"; exit 1; }
+      - name: Build unsigned app
+        working-directory: apps/ios
+        env:
+          API_URL: ${{ inputs.api_base_url }}
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          # Debug configuration: permits http:// for a server on your local network.
+          xcodebuild build \
+            -project SaigeVault.xcodeproj -scheme SaigeVault -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            SAIGE_API_BASE_URL="$API_URL"
+      - name: Package .ipa
+        working-directory: apps/ios
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Debug-iphoneos/SaigeVault.app Payload/
+          zip -qr SaigeVault-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaigeVault-unsigned-ipa
+          path: apps/ios/SaigeVault-unsigned.ipa
+          retention-days: 14
