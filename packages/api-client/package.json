@@ -1,0 +1,23 @@
+{
+  "name": "@saige/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed client for the Saige Vault REST API, generated from OpenAPI",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "codegen": "openapi-typescript ../../docs/api/openapi.json -o src/schema.gen.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "@saige/config": "0.1.0",
+    "openapi-typescript": "^7.13.0",
+    "vitest": "^5.0.3"
+  }
+}

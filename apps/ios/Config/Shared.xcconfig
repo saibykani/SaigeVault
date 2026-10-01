@@ -1,0 +1,9 @@
+// Shared build settings. Personal values (Apple team, bundle id, server URL)
+// belong in Config/Local.xcconfig, which is git-ignored.
+// Copy Config/Local.xcconfig.example -> Config/Local.xcconfig and edit it.
+
+SAIGE_BUNDLE_ID = com.saige.vault
+SAIGE_DEVELOPMENT_TEAM =
+
+// xcconfig treats "//" as a comment, so URLs are assembled with $(SLASH).
+SLASH = /

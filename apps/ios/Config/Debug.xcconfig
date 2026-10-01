@@ -1,0 +1,7 @@
+#include "Shared.xcconfig"
+
+// Simulator talks to the API on the same Mac. For a physical iPhone, set your
+// Mac's LAN address in Local.xcconfig, e.g. http:$(SLASH)$(SLASH)192.168.1.20:8000
+SAIGE_API_BASE_URL = http:$(SLASH)$(SLASH)localhost:8000
+
+#include? "Local.xcconfig"

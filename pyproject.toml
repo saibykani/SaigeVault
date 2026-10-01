@@ -1,0 +1,70 @@
+# uv workspace root for the Python services. Not a distributable package.
+[project]
+name = "saige-vault-workspace"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["services/api", "services/worker", "services/ai"]
+
+[tool.uv.sources]
+saige-api = { workspace = true }
+saige-ai = { workspace = true }
+saige-worker = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "saige-api",
+    "saige-ai",
+    "saige-worker",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "ruff>=0.16",
+    "mypy>=2.3",
+    "testcontainers[postgres,redis]>=4.15",
+    "psycopg[binary]>=3.3",
+    "pip-audit>=2.9",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["services/api/src", "services/worker/src", "services/ai/src"]
+extend-exclude = ["database/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "N", "SIM", "RUF", "ASYNC", "PL", "DTZ", "T20"]
+ignore = ["PLR0913", "PLR2004", "RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S311", "PLR2004"]
+"tests/**" = ["S101", "S105", "S106", "PLR2004"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = ["services/api/src", "services/worker/src", "services/ai/src"]
+explicit_package_bases = true
+exclude = ["database/migrations/versions/"]
+
+[[tool.mypy.overrides]]
+module = ["saq.*", "testcontainers.*", "croniter.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["services/api/tests", "services/worker/tests", "services/ai/tests", "tests/integration", "tests/security"]
+markers = [
+    "integration: requires real PostgreSQL/Redis (via testcontainers or TEST_DATABASE_URL)",
+]
+addopts = "-ra --strict-markers --import-mode=importlib"
+pythonpath = ["services/api/tests"]

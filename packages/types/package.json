@@ -1,0 +1,16 @@
+{
+  "name": "@saige/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Domain types shared by Saige Vault TypeScript clients",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@saige/config": "0.1.0"
+  }
+}

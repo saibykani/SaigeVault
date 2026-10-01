@@ -1,0 +1,33 @@
+[project]
+name = "saige-api"
+version = "0.1.0"
+description = "Saige Vault REST API"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.142",
+    "uvicorn[standard]>=0.54",
+    "sqlalchemy[asyncio]>=2.1",
+    "asyncpg>=0.31",
+    "alembic>=1.20",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
+    "structlog>=26.1",
+    "redis>=7.0,<8",
+    "httpx>=0.28",
+    "cryptography>=50.0",
+    "saige-ai",
+]
+
+[project.scripts]
+saige-api = "saige_api.main:run"
+saige-export-openapi = "saige_api.openapi_export:main"
+
+[tool.uv.sources]
+saige-ai = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/saige_api"]

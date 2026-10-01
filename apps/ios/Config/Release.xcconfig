@@ -1,0 +1,7 @@
+#include "Shared.xcconfig"
+
+// Release builds must point at an HTTPS server. Override in Local.xcconfig.
+// AppConfig refuses non-HTTPS URLs in release builds.
+SAIGE_API_BASE_URL = https:$(SLASH)$(SLASH)vault.invalid
+
+#include? "Local.xcconfig"

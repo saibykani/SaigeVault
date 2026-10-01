@@ -1,0 +1,69 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+!debug.keystore
+google-credentials*.json
+service-account*.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.turbo/
+playwright-report/
+test-results/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+htmlcov/
+.coverage
+.coverage.*
+
+# Android
+apps/android/.gradle/
+apps/android/build/
+apps/android/**/build/
+apps/android/local.properties
+apps/android/.kotlin/
+apps/android/captures/
+*.apk
+*.aab
+
+# iOS
+apps/ios/Config/Local.xcconfig
+apps/ios/SaigeVault/Info.plist
+apps/ios/*.xcodeproj/
+apps/ios/build/
+apps/ios/DerivedData/
+apps/ios/**/xcuserdata/
+*.ipa
+*.dSYM.zip
+
+# Local data volumes
+.data/
+backups/

@@ -1,0 +1,13 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in.
+
+// Your Apple Developer Team ID (Xcode > Settings > Accounts). A free Apple ID
+// "Personal Team" works for installing on your own iPhone (7-day profiles).
+SAIGE_DEVELOPMENT_TEAM = ABCDE12345
+
+// Bundle IDs must be globally unique for personal teams.
+SAIGE_BUNDLE_ID = com.yourname.saigevault
+
+// Physical iPhone + server on your Mac: use the Mac's LAN IP.
+// SAIGE_API_BASE_URL = http:$(SLASH)$(SLASH)192.168.1.20:8000
+// Deployed server:
+// SAIGE_API_BASE_URL = https:$(SLASH)$(SLASH)vault.example.com

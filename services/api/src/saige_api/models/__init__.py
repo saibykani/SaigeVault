@@ -1,0 +1,73 @@
+"""Import every model so `Base.metadata` is complete (Alembic, tests)."""
+
+from saige_api.models.ai import (
+    AgentRun,
+    AgentStep,
+    AgentToolCall,
+    AIConversation,
+    AIMessage,
+    SearchHistory,
+)
+from saige_api.models.documents import (
+    DocumentChunk,
+    DocumentEntity,
+    DocumentExtractedContent,
+    DocumentProcessingJob,
+    DocumentSummary,
+    EmbeddingRecord,
+)
+from saige_api.models.files import (
+    Collection,
+    CollectionFile,
+    File,
+    FileMetadata,
+    FileTag,
+    FileVersion,
+    Folder,
+    Tag,
+)
+from saige_api.models.identity import ApiKey, OAuthAccount, StorageConnection, User, UserSession
+from saige_api.models.system import (
+    GLOBAL_OR_NULLABLE_USER_TABLES,
+    AuditLog,
+    FeatureFlag,
+    Notification,
+    SecurityEvent,
+    SyncEvent,
+    SyncJob,
+)
+
+__all__ = [
+    "GLOBAL_OR_NULLABLE_USER_TABLES",
+    "AIConversation",
+    "AIMessage",
+    "AgentRun",
+    "AgentStep",
+    "AgentToolCall",
+    "ApiKey",
+    "AuditLog",
+    "Collection",
+    "CollectionFile",
+    "DocumentChunk",
+    "DocumentEntity",
+    "DocumentExtractedContent",
+    "DocumentProcessingJob",
+    "DocumentSummary",
+    "EmbeddingRecord",
+    "FeatureFlag",
+    "File",
+    "FileMetadata",
+    "FileTag",
+    "FileVersion",
+    "Folder",
+    "Notification",
+    "OAuthAccount",
+    "SearchHistory",
+    "SecurityEvent",
+    "StorageConnection",
+    "SyncEvent",
+    "SyncJob",
+    "Tag",
+    "User",
+    "UserSession",
+]

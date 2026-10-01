@@ -1,0 +1,30 @@
+{
+  "name": "saige-vault",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Saige Vault — private AI-powered personal document vault (monorepo root)",
+  "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w @saige/web",
+    "build:web": "npm run build -w @saige/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "e2e": "npm run e2e -w @saige/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "codegen": "npm run codegen -w @saige/api-client"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.9",
+    "prettier-plugin-tailwindcss": "^0.7.0",
+    "typescript": "~6.0.3"
+  }
+}

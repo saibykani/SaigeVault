@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+from support import make_settings
+
+from saige_api.core.config import AIProcessingPolicy, Environment
+
+
+def test_defaults_are_safe() -> None:
+    settings = make_settings()
+    assert settings.ai_processing_policy is AIProcessingPolicy.DISABLED
+    assert settings.is_production is False
+
+
+def test_cors_origins_parsed_from_comma_separated_string() -> None:
+    settings = make_settings(cors_allowed_origins="http://a.test, http://b.test")
+    assert settings.cors_allowed_origins == ["http://a.test", "http://b.test"]
+
+
+def test_production_requires_secrets() -> None:
+    with pytest.raises(ValidationError, match="JWT_SECRET"):
+        make_settings(app_env=Environment.PRODUCTION)
+
+
+def test_production_rejects_short_jwt_secret() -> None:
+    with pytest.raises(ValidationError, match="at least 32"):
+        make_settings(
+            app_env=Environment.PRODUCTION, jwt_secret="short", token_encryption_key="k" * 44
+        )
+
+
+def test_production_rejects_wildcard_cors() -> None:
+    with pytest.raises(ValidationError, match="Wildcard"):
+        make_settings(
+            app_env=Environment.PRODUCTION,
+            jwt_secret="x" * 48,
+            token_encryption_key="k" * 44,
+            cors_allowed_origins="*",
+        )
+
+
+def test_database_url_requires_async_driver() -> None:
+    with pytest.raises(ValidationError, match="asyncpg"):
+        make_settings(database_url="postgresql://u:p@localhost/db")
+
+
+def test_secrets_are_not_rendered_in_repr() -> None:
+    settings = make_settings(jwt_secret="very-secret-jwt-value")
+    assert "very-secret-jwt-value" not in repr(settings)
