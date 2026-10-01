@@ -17,7 +17,7 @@ saige-api = { workspace = true }
 saige-ai = { workspace = true }
 
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
