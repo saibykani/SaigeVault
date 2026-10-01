@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   applicationName: "Saige Vault",
   // Private application: never index.
   robots: { index: false, follow: false },
+  // Home-screen install on iPhone: full screen, no Safari toolbars.
+  appleWebApp: { capable: true, title: "Saige Vault", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
