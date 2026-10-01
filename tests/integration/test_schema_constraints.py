@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 pytestmark = pytest.mark.integration
+
+ALEMBIC_INI = Path(__file__).resolve().parents[2] / "services" / "api" / "alembic.ini"
 
 
 async def _user(conn: AsyncConnection, email: str) -> uuid.UUID:
@@ -154,6 +159,7 @@ async def test_enum_check_constraint_rejects_unknown_values(engine: AsyncEngine)
 
 
 async def test_migration_is_at_head(engine: AsyncEngine) -> None:
+    head = ScriptDirectory.from_config(Config(str(ALEMBIC_INI))).get_current_head()
     async with engine.connect() as conn:
         version = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-    assert version == "0001"
+    assert version == head

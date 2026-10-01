@@ -54,3 +54,4 @@ class SystemInfoResponse(BaseModel):
     api_version: Literal["v1"] = "v1"
     ai_processing_policy: Literal["disabled", "local_only", "third_party_allowed"]
     google_oauth_configured: bool
+    dev_login_enabled: bool = False

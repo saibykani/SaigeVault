@@ -55,7 +55,17 @@ class Settings(BaseSettings):
 
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
+    # Must point at the web origin (proxied to the API) so session cookies
+    # are first-party, e.g. http://localhost:3000/api/v1/auth/google/callback
     google_redirect_uri: str | None = None
+
+    access_token_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    refresh_token_ttl_days: int = Field(default=30, ge=1, le=90)
+    # Secure cookies require HTTPS; defaults to True in production.
+    cookie_secure: bool | None = None
+    # Development-only email login (no Google). Refused in production.
+    dev_login_enabled: bool = False
+    auth_rate_limit_per_minute: int = Field(default=20, ge=1)
 
     ai_processing_policy: AIProcessingPolicy = AIProcessingPolicy.DISABLED
 
@@ -74,10 +84,11 @@ class Settings(BaseSettings):
         "jwt_secret",
         "token_encryption_key",
         "google_client_secret",
+        "cookie_secure",
         mode="before",
     )
     @classmethod
-    def _empty_secret_is_none(cls, value: object) -> object:
+    def _empty_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
     @field_validator("database_url")
@@ -105,7 +116,21 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be at least 32 characters in production")
         if "*" in self.cors_allowed_origins:
             raise ValueError("Wildcard CORS origins are not allowed in production")
+        if self.dev_login_enabled:
+            raise ValueError("DEV_LOGIN_ENABLED must not be set in production")
+        if self.cookie_secure is False:
+            raise ValueError("COOKIE_SECURE cannot be disabled in production")
         return self
+
+    @property
+    def secure_cookies(self) -> bool:
+        return self.cookie_secure if self.cookie_secure is not None else self.is_production
+
+    @property
+    def google_oauth_configured(self) -> bool:
+        return bool(
+            self.google_client_id and self.google_client_secret and self.google_redirect_uri
+        )
 
     @property
     def is_production(self) -> bool:

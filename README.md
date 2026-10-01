@@ -4,7 +4,7 @@
 
 Clients: **Saige Vault Web** · **Saige Vault iOS** · **Saige Vault Android**. All three share a single backend, auth system, database, AI layer and storage.
 
-> **Status: foundation (Phases 0–2) complete.** Architecture, schema, health checks, the web UI shell and the iOS app shell are built and tested. File management, document processing, search and AI arrive phase by phase. The UI says plainly what isn't built yet and never fakes it.
+> **Status: Phases 0–3 complete.** Architecture, schema, health checks, the web UI, the iOS app shell and secure sign-in (Google + rotating sessions) are built and tested. File management, document processing, search and AI arrive phase by phase. The UI says plainly what isn't built yet and never fakes it.
 
 ## Architecture
 

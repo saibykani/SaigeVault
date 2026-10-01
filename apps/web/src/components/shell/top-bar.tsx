@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, UserRound } from "lucide-react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 
 import { LogoMark } from "@/components/common/logo";
@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useReadiness } from "@/lib/api";
 import { useUIStore } from "@/stores/ui-store";
 
+import { AccountMenu } from "./account-menu";
 import { ThemeToggle, useMounted } from "./theme-toggle";
 
 export function TopBar() {
@@ -52,12 +53,7 @@ export function TopBar() {
           <TooltipContent>{status.label}</TooltipContent>
         </Tooltip>
         <ThemeToggle />
-        <Button variant="outline" size="sm" asChild className="ml-1">
-          <Link href="/login">
-            <UserRound />
-            <span className="hidden sm:inline">Sign in</span>
-          </Link>
-        </Button>
+        <AccountMenu />
       </div>
     </header>
   );

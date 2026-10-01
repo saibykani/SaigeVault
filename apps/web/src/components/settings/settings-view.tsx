@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SessionsList } from "@/components/settings/sessions-list";
 import { useSystemInfo } from "@/lib/api";
 
 function Section({
@@ -121,8 +122,12 @@ export function SettingsView() {
         <FeatureNotice featureKey="googleDrive" />
       </Section>
 
-      <Section id="security" title="Security" description="Sessions, devices and sign-in activity.">
-        <FeatureNotice featureKey="auth" />
+      <Section
+        id="security"
+        title="Security"
+        description="Devices signed in to your vault. Revoke any you don't recognise."
+      >
+        <SessionsList />
       </Section>
 
       <Section

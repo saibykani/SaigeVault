@@ -6,7 +6,7 @@ import type * as React from "react";
 
 import { PhaseBadge } from "@/components/common/feature-notice";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSystemInfo } from "@/lib/api";
+import { useSession, useSystemInfo } from "@/lib/api";
 import type { FeatureKey } from "@/lib/features";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ function StepIcon({ state }: { state: StepState }) {
 
 export function SetupChecklist() {
   const { data: info, isError } = useSystemInfo();
+  const { data: session } = useSession();
 
   const steps: Step[] = [
     {
@@ -55,10 +56,10 @@ export function SetupChecklist() {
       state: info?.google_oauth_configured ? "done" : "todo",
     },
     {
-      title: "Sign in",
-      detail: "Sign in with your Google account.",
-      state: "blocked",
-      feature: "auth",
+      title: "Signed in",
+      detail: session ? `As ${session.user.email}` : "Sign in with your Google account.",
+      state: session ? "done" : "todo",
+      href: session ? "/settings#security" : "/login",
     },
     {
       title: "Connect Google Drive",

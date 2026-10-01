@@ -22,7 +22,12 @@ x-python-env: &python-env
   TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:-}
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8000/api/v1/auth/google/callback}
+  # Google redirects to the WEB origin; Next.js proxies /api/* to the API so
+  # session cookies are first-party.
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3000/api/v1/auth/google/callback}
+  WEB_PUBLIC_URL: ${WEB_PUBLIC_URL:-http://localhost:3000}
+  DEV_LOGIN_ENABLED: ${DEV_LOGIN_ENABLED:-false}
+  COOKIE_SECURE: ${COOKIE_SECURE:-}
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
   AI_PROCESSING_POLICY: ${AI_PROCESSING_POLICY:-disabled}
 
@@ -79,6 +84,10 @@ services:
       context: .
       dockerfile: infrastructure/docker/backend.Dockerfile
     restart: unless-stopped
+    # X-Forwarded-For is NOT trusted by default: the Next.js proxy passes
+    # client-supplied values through, so trusting it would allow IP spoofing.
+    # Behind a real reverse proxy that sets the header, set FORWARDED_ALLOW_IPS
+    # to that proxy's address only (docs/deployment/cloud.md).
     environment: *python-env
     ports: ["${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"]
     depends_on:
@@ -112,7 +121,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/web.Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        API_PROXY_TARGET: http://api:8000
     restart: unless-stopped
     ports: ["127.0.0.1:${WEB_PORT:-3000}:3000"]
     depends_on:

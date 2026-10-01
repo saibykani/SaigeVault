@@ -32,7 +32,7 @@ export const FEATURES: Record<FeatureKey, Feature> = {
   auth: {
     label: "Secure sign-in",
     phase: 3,
-    available: false,
+    available: true,
     description: "Google sign-in with server-side sessions and token rotation.",
   },
   googleDrive: {

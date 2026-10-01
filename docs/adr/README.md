@@ -12,3 +12,4 @@ Each ADR records one significant decision: its context, the decision, and its co
 | [0006](0006-ai-provider-abstraction-and-policy.md) | Provider-independent AI layer gated by an AI processing policy | Accepted |
 | [0007](0007-search-and-vector-index.md) | PostgreSQL full-text + Qdrant; Qdrant is a derived index | Accepted |
 | [0008](0008-native-mobile-clients.md) | Native mobile clients (SwiftUI, Jetpack Compose) with no business logic | Accepted |
+| [0009](0009-sessions-and-same-origin-proxy.md) | Rotating refresh-token sessions behind a same-origin proxy | Accepted |

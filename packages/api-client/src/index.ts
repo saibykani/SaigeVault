@@ -7,13 +7,19 @@ export type Schemas = components["schemas"];
 export type ReadinessResponse = Schemas["ReadinessResponse"];
 export type SystemInfoResponse = Schemas["SystemInfoResponse"];
 export type ErrorResponse = Schemas["ErrorResponse"];
+export type SessionResponse = Schemas["SessionResponse"];
+export type SessionSummary = Schemas["SessionSummary"];
+export type UserProfile = Schemas["UserProfile"];
+
+export { createAuthFetch, CSRF_COOKIE, CSRF_HEADER, readCookie } from "./auth-fetch";
+export type { AuthFetchOptions } from "./auth-fetch";
 
 export type SaigeApiClient = Client<paths>;
 
 export interface ApiClientOptions {
   baseUrl: string;
-  /** Inject a fetch implementation (tests, SSR). */
-  fetch?: typeof fetch;
+  /** Inject a fetch implementation (auth wrapper, tests, SSR). */
+  fetch?: (request: Request) => Promise<Response>;
 }
 
 /** Error thrown for non-2xx responses, carrying the server's error envelope. */
@@ -53,7 +59,7 @@ const requestIdMiddleware: Middleware = {
 export function createApiClient({ baseUrl, fetch: fetchImpl }: ApiClientOptions): SaigeApiClient {
   const client = createClient<paths>({
     baseUrl: baseUrl.replace(/\/+$/, ""),
-    // Session cookies (Phase 3) are HttpOnly and sent automatically.
+    // Session cookies are HttpOnly and sent automatically.
     credentials: "include",
     ...(fetchImpl ? { fetch: fetchImpl } : {}),
   });

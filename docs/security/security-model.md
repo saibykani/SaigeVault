@@ -15,6 +15,10 @@ All documents are treated as **sensitive by default**. This page lists controls 
 | Web | CSP (`frame-ancestors 'none'`, `object-src 'none'`, connect-src limited to the API), security headers, `noindex`; client UI state only in localStorage | `apps/web/next.config.ts` |
 | AI privacy | Processing policy defaults to `disabled`; `ensure_allowed()` gate | ADR-0006 |
 | iOS | App Lock (Face ID / Touch ID / passcode) on by default; privacy shield in the app switcher; ephemeral `URLSession` with no cache; ATS HTTPS-only (local networking only for development); release builds reject non-HTTPS servers | `apps/ios` |
+| Authentication | Google OIDC (PKCE S256, single-use state, nonce, JWKS-verified ID token, verified email only); 15-minute access JWT plus a server-side session check on every request; rotating hashed refresh tokens with reuse detection (session revoked, security event logged); dev sign-in refused in production | ADR-0009, `auth/` |
+| Cookies and CSRF | HttpOnly, path-scoped session cookies (`SameSite=Lax`, `Secure` outside local dev); tokens never readable by JavaScript; double-submit CSRF token on cookie-authenticated mutations; same-origin proxy keeps cookies first-party | `auth/cookies.py`, `auth/deps.py`, `apps/web/next.config.ts` |
+| Abuse controls | Redis rate limits on sign-in, callback and refresh; open-redirect guard on post-login destinations; `404` for other users' sessions | `ratelimit.py`, `auth/state.py` |
+| Audit | `LOGIN` (success and failure, with method), `LOGOUT`, `SECURITY_EVENT` with IP, user agent and request ID; never tokens | `audit.py` |
 | Containers | Non-root users; ports bound to 127.0.0.1; secrets via environment, never build args | `infrastructure/docker` |
 | Supply chain | Locked dependencies (uv.lock, package-lock.json); CI runs gitleaks, pip-audit, npm audit and CodeQL; Dependabot | `.github` |
 
@@ -22,10 +26,11 @@ All documents are treated as **sensitive by default**. This page lists controls 
 
 | Phase | Control |
 | --- | --- |
-| P3 | Google OAuth (PKCE + state), HttpOnly/Secure/SameSite session cookies for web, Keychain/Keystore tokens for mobile, refresh-token rotation with reuse detection, CSRF tokens for cookie-authenticated mutations, audit `LOGIN`/`LOGOUT` |
+| P6 | Mobile sign-in (ASWebAuthenticationSession / Custom Tabs) with tokens in the Keychain / Keystore |
 | P4 | AES-GCM token encryption with key versioning; least-privilege Drive scopes; `OAUTH_CONNECT`/`OAUTH_DISCONNECT` audit |
 | P5 | Upload validation by magic bytes, size limits, type allow-list, filename sanitization, ZIP-bomb protection; rate limiting |
 | P7–P12 | Prompt-injection defences (retrieved text as delimited data), retrieval always filtered by `user_id`, tool-call authorization, confirmation for destructive actions |
+| P16 | Trusted reverse proxy setting `X-Forwarded-For`, so audit IPs and rate limits use real client addresses (not trusted by default, see ADR-0009) |
 | P14 | Nonce-based web CSP (removing `'unsafe-inline'`), PostgreSQL Row-Level Security, security-event alerting, Android screenshot protection (`FLAG_SECURE`), encrypted offline caches, penetration-test checklist |
 
 ## Threats specific to AI

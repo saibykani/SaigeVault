@@ -31,11 +31,21 @@
 | --- | --- | --- |
 | GET | `/health` | Liveness, no I/O |
 | GET | `/ready` | Dependency readiness: `ready` / `degraded` (200), `not_ready` (503) |
-| GET | `/api/v1/system/info` | Version, environment, AI processing policy, whether Google OAuth is configured. No secrets |
+| GET | `/api/v1/system/info` | Version, environment, AI processing policy, whether Google OAuth and dev sign-in are enabled. No secrets |
+| GET | `/api/v1/auth/google/login?next=` | Starts Google sign-in (302 to Google). Rate-limited |
+| GET | `/api/v1/auth/google/callback` | OAuth callback: verifies state, PKCE and ID token, then sets session cookies and redirects to the web app |
+| POST | `/api/v1/auth/dev-login` | Development-only email sign-in. `404` unless `DEV_LOGIN_ENABLED` (never in production) |
+| POST | `/api/v1/auth/refresh` | Rotates the refresh token. Cookie mode needs `X-CSRF-Token`; body mode (`refresh_token`) returns a token pair for API clients |
+| POST | `/api/v1/auth/logout` | Ends this session and clears cookies (`204`) |
+| GET | `/api/v1/auth/session` | Current user and session (`401` when signed out) |
+| GET | `/api/v1/auth/sessions` | Active sessions for this user |
+| DELETE | `/api/v1/auth/sessions/{id}` | Revokes one of your sessions (`404` if not yours) |
+
+**Authentication:** send `Authorization: Bearer <access token>`, or use the browser session cookies. Cookie-authenticated `POST`/`PUT`/`PATCH`/`DELETE` require `X-CSRF-Token` equal to the `saige_csrf` cookie.
 
 ## Planned resource groups
 
-`/api/v1/auth` (P3) · `/users` · `/storage` (P4) · `/files`, `/folders`, `/collections`, `/tags` (P5) · `/documents` (P7) · `/search` (P8) · `/ai`, `/chat` (P10–P11) · `/agents` (P12) · `/sync` (P13) · `/settings`.
+`/users` · `/storage` (P4) · `/files`, `/folders`, `/collections`, `/tags` (P5) · `/documents` (P7) · `/search` (P8) · `/ai`, `/chat` (P10–P11) · `/agents` (P12) · `/sync` (P13) · `/settings`.
 
 ## Clients
 

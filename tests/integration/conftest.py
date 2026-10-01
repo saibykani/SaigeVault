@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from alembic import command
@@ -46,6 +47,30 @@ def database_url() -> Iterator[str]:
         pytest.skip(f"No TEST_DATABASE_URL and Docker unavailable: {type(exc).__name__}")
     try:
         yield container.get_connection_url()
+    finally:
+        container.stop()
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> Iterator[str]:
+    explicit = os.environ.get("TEST_REDIS_URL")
+    if explicit:
+        # Auth tests FLUSHDB between runs; never allow the default database 0.
+        if urlparse(explicit).path.strip("/") in {"", "0"}:
+            pytest.exit("TEST_REDIS_URL must select a non-zero database, e.g. /15", returncode=2)
+        yield explicit
+        return
+    try:
+        from testcontainers.community.redis import RedisContainer  # noqa: PLC0415
+
+        container = RedisContainer("redis:7.4-alpine")
+        container.start()
+    except Exception as exc:
+        pytest.skip(f"No TEST_REDIS_URL and Docker unavailable: {type(exc).__name__}")
+    try:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(6379)
+        yield f"redis://{host}:{port}/0"
     finally:
         container.stop()
 

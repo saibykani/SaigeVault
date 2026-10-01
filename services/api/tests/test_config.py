@@ -48,3 +48,18 @@ def test_database_url_requires_async_driver() -> None:
 def test_secrets_are_not_rendered_in_repr() -> None:
     settings = make_settings(jwt_secret="very-secret-jwt-value")
     assert "very-secret-jwt-value" not in repr(settings)
+
+
+def test_empty_cookie_secure_means_automatic() -> None:
+    assert make_settings(cookie_secure="").secure_cookies is False
+    assert make_settings(cookie_secure="true").secure_cookies is True
+
+
+def test_production_rejects_dev_login() -> None:
+    with pytest.raises(ValidationError, match="DEV_LOGIN_ENABLED"):
+        make_settings(
+            app_env=Environment.PRODUCTION,
+            jwt_secret="x" * 48,
+            token_encryption_key="k" * 44,
+            dev_login_enabled=True,
+        )

@@ -58,8 +58,11 @@ class UserSession(UUIDPrimaryKeyMixin, UserOwnedMixin, TimestampMixin, Base):
         tenant_key("user_sessions"),
         owned_fk("rotated_from_id", "user_sessions", ondelete="SET NULL"),
         Index("ix_user_sessions_active", "user_id", "revoked_at", "expires_at"),
+        Index("ix_user_sessions_family", "user_id", "family_id"),
     )
 
+    # Stable session identifier shared by every rotation of one sign-in.
+    family_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
     refresh_token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
     platform: Mapped[ClientPlatform] = mapped_column(
         str_enum(ClientPlatform, "client_platform"), nullable=False

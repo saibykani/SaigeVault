@@ -69,7 +69,9 @@ async def test_docs_disabled_in_production(client_factory: ClientFactory) -> Non
 
 async def test_system_info_exposes_no_secrets(client_factory: ClientFactory) -> None:
     async for client in client_factory(
-        google_client_id="client-id", google_client_secret="super-secret-value"
+        google_client_id="client-id",
+        google_client_secret="super-secret-value",
+        google_redirect_uri="http://localhost:3000/api/v1/auth/google/callback",
     ):
         response = await client.get("/api/v1/system/info")
         assert response.status_code == 200

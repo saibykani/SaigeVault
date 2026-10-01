@@ -1,4 +1,34 @@
-import { expect, test } from "@playwright/test";
+import { type BrowserContext, expect, test } from "@playwright/test";
+
+/**
+ * These tests run without a backend. The UI route guard only checks for the
+ * session hint cookie, so setting it lets us exercise the signed-in shell;
+ * real authorization is enforced (and tested) server-side.
+ */
+async function withSessionHint(context: BrowserContext, baseURL: string | undefined) {
+  await context.addCookies([
+    { name: "saige_csrf", value: "e2e", url: baseURL ?? "http://localhost:3100" },
+  ]);
+}
+
+test.beforeEach(async ({ context, baseURL }, testInfo) => {
+  if (!testInfo.title.startsWith("guard:")) await withSessionHint(context, baseURL);
+});
+
+test("guard: signed-out visitors are sent to sign in, keeping their destination", async ({
+  page,
+}) => {
+  await page.goto("/files?view=grid");
+  await expect(page).toHaveURL(/\/login\?next=%2Ffiles%3Fview%3Dgrid$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sign in to your vault" }),
+  ).toBeVisible();
+});
+
+test("guard: the sign-in page is public", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/login$/);
+});
 
 const PAGES = [
   { path: "/", heading: "Dashboard" },
@@ -20,7 +50,7 @@ for (const { path, heading } of PAGES) {
 }
 
 test("security headers are set on pages", async ({ request }) => {
-  const response = await request.get("/");
+  const response = await request.get("/login");
   const headers = response.headers();
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
   expect(headers["x-frame-options"]).toBe("DENY");

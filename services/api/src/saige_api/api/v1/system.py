@@ -18,5 +18,6 @@ async def system_info(resources: ResourcesDep) -> SystemInfoResponse:
         version=__version__,
         environment=settings.app_env.value,
         ai_processing_policy=settings.ai_processing_policy.value,
-        google_oauth_configured=bool(settings.google_client_id and settings.google_client_secret),
+        google_oauth_configured=settings.google_oauth_configured,
+        dev_login_enabled=settings.dev_login_enabled and not settings.is_production,
     )
