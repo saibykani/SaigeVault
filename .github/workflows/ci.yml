@@ -39,7 +39,7 @@ jobs:
       TEST_REDIS_URL: redis://localhost:6379/15
       DATABASE_URL: postgresql+asyncpg://saige:saige@localhost:5432/saige_test
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -63,7 +63,7 @@ jobs:
     name: Web + TypeScript packages
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -92,7 +92,7 @@ jobs:
     name: iOS (build + XCTest)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Select Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
       - name: Build and test
@@ -111,7 +111,7 @@ jobs:
       run:
         working-directory: apps/android
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # Steps are skipped until the Android shell (Gradle wrapper) lands.
       - uses: actions/setup-java@v5
         if: hashFiles('apps/android/gradlew') != ''
@@ -135,7 +135,7 @@ jobs:
     name: Docker images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Build api, worker and web images
         run: docker compose build api worker web
@@ -144,7 +144,7 @@ jobs:
     name: Security checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Secret scan
