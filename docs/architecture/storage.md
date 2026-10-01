@@ -13,7 +13,13 @@ See [ADR-0002](../adr/0002-storage-provider-abstraction.md), [ADR-0004](../adr/0
 | Queue, worker heartbeat | Redis | AOF-persisted; job truth is in PostgreSQL |
 | OAuth tokens | PostgreSQL, encrypted (`encrypted_access_token`, `encrypted_refresh_token`) | Never sent to clients. `token_key_version` supports key rotation |
 
-## Schema overview (migration `0001`)
+## Google Drive
+
+- Scope `drive.file`: Saige only sees files it created, inside its own **Saige Vault** folder (identified by a private `appProperties` marker). See [ADR-0010](../adr/0010-drive-scope-and-token-encryption.md).
+- `storage_connections` holds the account, status (`active` / `needs_reauth` / `disconnected`), granted scopes, `root_folder_id`, `changes_page_token` (for sync, P13) and AES-GCM-encrypted tokens.
+- Code: `storage/base.py` (provider interface), `storage/google_drive.py` (Drive v3 over httpx), `storage/connections.py` (token custody, refresh, connect, disconnect).
+
+## Schema overview (migrations `0001`–`0002`)
 
 - **Identity:** `users`, `user_sessions` (refresh-token hashes and rotation chain), `oauth_accounts`, `storage_connections`, `api_keys` (hashes only).
 - **Files:** `folders`, `files`, `file_versions`, `file_metadata` (key/value with `source` ∈ system/ai/user, `confidence`, `source_page`, `is_confirmed`), `tags`, `file_tags` (suggested/confirmed/rejected), `collections`, `collection_files`.

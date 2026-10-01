@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from saige_api.api.deps import ResourcesDep, SessionDep
+from saige_api.api.v1.storage import complete_drive_connect, drive_redirect
 from saige_api.audit import client_ip, record_audit, record_security_event, user_agent
 from saige_api.auth.cookies import REFRESH_COOKIE, clear_session_cookies, set_session_cookies
 from saige_api.auth.deps import CurrentUserDep, verify_csrf
@@ -22,7 +23,7 @@ from saige_api.auth.sessions import (
     RevokeReason,
     SessionService,
 )
-from saige_api.auth.state import PendingLogin, safe_next_path
+from saige_api.auth.state import DRIVE_CONNECT, PendingLogin, safe_next_path
 from saige_api.auth.tokens import new_csrf_token
 from saige_api.auth.users import user_for_dev_login, user_for_google_identity
 from saige_api.core.errors import AppError, NotFoundError, UnauthorizedError, error_response
@@ -132,6 +133,12 @@ async def google_callback(  # noqa: PLR0911 - one early return per failure mode
         return _login_error(resources, "google_not_configured")
     # Consume state first so it is single-use even when Google reports an error.
     pending = await resources.oauth_state.consume(state or "")
+    if pending is not None and pending.purpose == DRIVE_CONNECT:
+        if error or not code:
+            return drive_redirect(
+                resources, pending.next_path, error="access_denied" if error else "missing_code"
+            )
+        return await complete_drive_connect(request, resources, db, pending, code)
     if error:
         return _login_error(
             resources, "access_denied" if error == "access_denied" else "google_error"

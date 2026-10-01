@@ -9,6 +9,8 @@ from typing import Any
 from saige_api.core.config import Environment, Settings
 from saige_api.health import HealthCheck
 
+TEST_KEY = "A" * 43 + "="  # 32 zero bytes; valid url-safe base64 key for tests
+
 
 class StaticCheck:
     """Health check with a predetermined outcome."""

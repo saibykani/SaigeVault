@@ -38,7 +38,7 @@ export const FEATURES: Record<FeatureKey, Feature> = {
   googleDrive: {
     label: "Google Drive connection",
     phase: 4,
-    available: false,
+    available: true,
     description:
       "Connect your Drive. Files stay in your Drive; tokens stay encrypted on the server.",
   },

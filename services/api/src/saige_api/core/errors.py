@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from saige_api.core.logging import get_logger
+from saige_api.storage.base import StorageError
 
 logger = get_logger("saige_api.errors")
 
@@ -52,6 +53,11 @@ class RateLimitedError(AppError):
     code = "rate_limited"
 
 
+class ServiceUnavailableError(AppError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "service_unavailable"
+
+
 class ConflictError(AppError):
     status_code = status.HTTP_409_CONFLICT
     code = "conflict"
@@ -86,6 +92,26 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
         return error_response(request, exc.status_code, exc.code, exc.message, exc.details)
+
+    @app.exception_handler(StorageError)
+    async def _storage_error(request: Request, exc: StorageError) -> JSONResponse:
+        status_code = {
+            "storage_not_found": status.HTTP_404_NOT_FOUND,
+            "storage_reauth_required": status.HTTP_409_CONFLICT,
+            "storage_quota_exceeded": status.HTTP_507_INSUFFICIENT_STORAGE,
+            "storage_permission_denied": status.HTTP_403_FORBIDDEN,
+            "storage_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
+        }.get(exc.code, status.HTTP_502_BAD_GATEWAY)
+        messages = {
+            "storage_not_found": "The file was not found in your storage.",
+            "storage_reauth_required": "Reconnect your Google Drive to continue.",
+            "storage_quota_exceeded": "Your Google Drive storage is full.",
+            "storage_permission_denied": "Saige doesn't have permission for that file.",
+            "storage_unavailable": "Google Drive is temporarily unavailable. Try again shortly.",
+        }
+        return error_response(
+            request, status_code, exc.code, messages.get(exc.code, "Storage request failed")
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:

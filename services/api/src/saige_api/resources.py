@@ -15,6 +15,7 @@ from saige_api.auth.state import OAuthStateStore
 from saige_api.auth.tokens import TokenService
 from saige_api.core.config import Settings
 from saige_api.core.logging import get_logger
+from saige_api.crypto import TokenCipher
 from saige_api.db.session import create_engine, create_session_factory
 from saige_api.health import (
     DatabaseCheck,
@@ -51,6 +52,8 @@ class Resources:
     oauth_state: OAuthStateStore
     rate_limiter: RateLimiter
     google: GoogleOAuthClient | None = None
+    # None when TOKEN_ENCRYPTION_KEY is unset: storage connections are then unavailable.
+    cipher: TokenCipher | None = None
     health_checks: list[HealthCheck] = field(default_factory=list)
 
     @classmethod
@@ -84,6 +87,11 @@ class Resources:
             oauth_state=OAuthStateStore(redis),
             rate_limiter=RateLimiter(redis),
             google=google,
+            cipher=(
+                TokenCipher.from_single_key(settings.token_encryption_key.get_secret_value())
+                if settings.token_encryption_key
+                else None
+            ),
         )
         resources.health_checks = [
             DatabaseCheck(engine),

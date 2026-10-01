@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from saige_api.api.v1 import auth, system
+from saige_api.api.v1 import auth, storage, system
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
+api_router.include_router(storage.router)

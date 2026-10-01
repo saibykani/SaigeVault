@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     dev_login_enabled: bool = False
     auth_rate_limit_per_minute: int = Field(default=20, ge=1)
 
+    # Least privilege by default: Saige only sees files it created (its own
+    # "Saige Vault" folder), never the rest of the user's Drive.
+    google_drive_scope: str = "https://www.googleapis.com/auth/drive.file"
+    google_drive_root_folder_name: str = Field(default="Saige Vault", min_length=1, max_length=100)
+
     ai_processing_policy: AIProcessingPolicy = AIProcessingPolicy.DISABLED
 
     readiness_timeout_seconds: float = 2.0
@@ -90,6 +95,15 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_is_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @field_validator("token_encryption_key")
+    @classmethod
+    def _valid_encryption_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None:
+            from saige_api.crypto import decode_key  # noqa: PLC0415 - avoid import cycle
+
+            decode_key(value.get_secret_value())
+        return value
 
     @field_validator("database_url")
     @classmethod
@@ -125,6 +139,10 @@ class Settings(BaseSettings):
     @property
     def secure_cookies(self) -> bool:
         return self.cookie_secure if self.cookie_secure is not None else self.is_production
+
+    @property
+    def google_drive_available(self) -> bool:
+        return self.google_oauth_configured and self.token_encryption_key is not None
 
     @property
     def google_oauth_configured(self) -> bool:

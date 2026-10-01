@@ -6,7 +6,7 @@ import type * as React from "react";
 
 import { PhaseBadge } from "@/components/common/feature-notice";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSession, useSystemInfo } from "@/lib/api";
+import { useSession, useStorageConnections, useSystemInfo } from "@/lib/api";
 import type { FeatureKey } from "@/lib/features";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,8 @@ function StepIcon({ state }: { state: StepState }) {
 export function SetupChecklist() {
   const { data: info, isError } = useSystemInfo();
   const { data: session } = useSession();
+  const { data: connections } = useStorageConnections(Boolean(session));
+  const drive = connections?.find((c) => c.status !== "disconnected");
 
   const steps: Step[] = [
     {
@@ -63,9 +65,13 @@ export function SetupChecklist() {
     },
     {
       title: "Connect Google Drive",
-      detail: "Your files stay in your Drive; Saige stores references and metadata.",
-      state: "blocked",
-      feature: "googleDrive",
+      detail: drive
+        ? drive.status === "needs_reauth"
+          ? "Reconnect needed — Google no longer accepts Saige's access."
+          : `Connected as ${drive.account_email ?? "your Google account"}.`
+        : "Your files stay in your Drive; Saige stores references and metadata.",
+      state: drive?.status === "active" ? "done" : "todo",
+      href: "/settings#storage",
     },
     {
       title: "Review AI & privacy policy",

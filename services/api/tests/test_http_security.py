@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from support import ClientFactory
+from support import TEST_KEY, ClientFactory
 
 
 async def test_security_headers_present(client_factory: ClientFactory) -> None:
@@ -60,7 +60,7 @@ async def test_docs_disabled_in_production(client_factory: ClientFactory) -> Non
     async for client in client_factory(
         app_env="production",
         jwt_secret="x" * 48,
-        token_encryption_key="k" * 44,
+        token_encryption_key=TEST_KEY,
     ):
         assert (await client.get("/docs")).status_code == 404
         assert (await client.get("/openapi.json")).status_code == 404

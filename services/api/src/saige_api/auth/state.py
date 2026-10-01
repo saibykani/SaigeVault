@@ -14,11 +14,18 @@ STATE_TTL_SECONDS = 600
 _PREFIX = "saige:oauth_state:"
 
 
+LOGIN = "login"
+DRIVE_CONNECT = "drive_connect"
+
+
 @dataclass(frozen=True, slots=True)
 class PendingLogin:
     code_verifier: str
     nonce: str
     next_path: str
+    # "login" or "drive_connect". Drive consent is bound to the user who started it.
+    purpose: str = LOGIN
+    user_id: str | None = None
 
 
 class OAuthStateStore:

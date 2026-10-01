@@ -10,6 +10,8 @@ export type ErrorResponse = Schemas["ErrorResponse"];
 export type SessionResponse = Schemas["SessionResponse"];
 export type SessionSummary = Schemas["SessionSummary"];
 export type UserProfile = Schemas["UserProfile"];
+export type StorageConnectionSummary = Schemas["StorageConnectionSummary"];
+export type StorageQuotaResponse = Schemas["StorageQuotaResponse"];
 
 export { createAuthFetch, CSRF_COOKIE, CSRF_HEADER, readCookie } from "./auth-fetch";
 export type { AuthFetchOptions } from "./auth-fetch";

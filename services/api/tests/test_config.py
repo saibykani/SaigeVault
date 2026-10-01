@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-from support import make_settings
+from support import TEST_KEY, make_settings
 
 from saige_api.core.config import AIProcessingPolicy, Environment
 
@@ -26,7 +26,7 @@ def test_production_requires_secrets() -> None:
 def test_production_rejects_short_jwt_secret() -> None:
     with pytest.raises(ValidationError, match="at least 32"):
         make_settings(
-            app_env=Environment.PRODUCTION, jwt_secret="short", token_encryption_key="k" * 44
+            app_env=Environment.PRODUCTION, jwt_secret="short", token_encryption_key=TEST_KEY
         )
 
 
@@ -35,7 +35,7 @@ def test_production_rejects_wildcard_cors() -> None:
         make_settings(
             app_env=Environment.PRODUCTION,
             jwt_secret="x" * 48,
-            token_encryption_key="k" * 44,
+            token_encryption_key=TEST_KEY,
             cors_allowed_origins="*",
         )
 
@@ -60,6 +60,6 @@ def test_production_rejects_dev_login() -> None:
         make_settings(
             app_env=Environment.PRODUCTION,
             jwt_secret="x" * 48,
-            token_encryption_key="k" * 44,
+            token_encryption_key=TEST_KEY,
             dev_login_enabled=True,
         )

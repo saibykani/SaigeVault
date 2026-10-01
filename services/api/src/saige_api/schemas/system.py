@@ -55,3 +55,4 @@ class SystemInfoResponse(BaseModel):
     ai_processing_policy: Literal["disabled", "local_only", "third_party_allowed"]
     google_oauth_configured: bool
     dev_login_enabled: bool = False
+    google_drive_available: bool = False

@@ -7,6 +7,8 @@ import {
   type ReadinessResponse,
   type SessionResponse,
   type SessionSummary,
+  type StorageConnectionSummary,
+  type StorageQuotaResponse,
   type SystemInfoResponse,
 } from "@saige/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,7 +39,14 @@ export const queryKeys = {
   systemInfo: ["system", "info"] as const,
   session: ["auth", "session"] as const,
   sessions: ["auth", "sessions"] as const,
+  storageConnections: ["storage", "connections"] as const,
+  storageQuota: (id: string) => ["storage", "quota", id] as const,
 };
+
+/** Starts the Drive consent flow (full-page navigation through Google). */
+export function driveConnectUrl(next = "/settings#storage"): string {
+  return `/api/v1/storage/google-drive/connect?next=${encodeURIComponent(next)}`;
+}
 
 /** Readiness is meaningful even on 503, so the body is returned either way. */
 async function fetchReadiness(): Promise<ReadinessResponse> {
@@ -132,5 +141,51 @@ export function useDevLogin() {
       if (!data) throw ApiError.fromResponse(response.status, error);
       return data;
     },
+  });
+}
+
+async function fetchStorageConnections(): Promise<StorageConnectionSummary[]> {
+  const { data, error, response } = await api.GET("/api/v1/storage/connections");
+  if (data) return data.connections;
+  if (response.status === 401) return [];
+  throw ApiError.fromResponse(response.status, error);
+}
+
+export function useStorageConnections(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.storageConnections,
+    queryFn: fetchStorageConnections,
+    enabled,
+  });
+}
+
+export function useStorageQuota(connectionId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.storageQuota(connectionId ?? ""),
+    enabled: Boolean(connectionId),
+    retry: false,
+    queryFn: async (): Promise<StorageQuotaResponse> => {
+      const { data, error, response } = await api.GET(
+        "/api/v1/storage/connections/{connection_id}/quota",
+        { params: { path: { connection_id: connectionId ?? "" } } },
+      );
+      if (data) return data;
+      throw ApiError.fromResponse(response.status, error);
+    },
+  });
+}
+
+export function useDisconnectStorage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (connectionId: string) => {
+      const { data, error, response } = await api.POST(
+        "/api/v1/storage/connections/{connection_id}/disconnect",
+        { params: { path: { connection_id: connectionId } } },
+      );
+      if (!data) throw ApiError.fromResponse(response.status, error);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["storage"] }),
   });
 }

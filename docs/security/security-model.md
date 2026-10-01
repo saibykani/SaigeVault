@@ -19,6 +19,7 @@ All documents are treated as **sensitive by default**. This page lists controls 
 | Cookies and CSRF | HttpOnly, path-scoped session cookies (`SameSite=Lax`, `Secure` outside local dev); tokens never readable by JavaScript; double-submit CSRF token on cookie-authenticated mutations; same-origin proxy keeps cookies first-party | `auth/cookies.py`, `auth/deps.py`, `apps/web/next.config.ts` |
 | Abuse controls | Redis rate limits on sign-in, callback and refresh; open-redirect guard on post-login destinations; `404` for other users' sessions | `ratelimit.py`, `auth/state.py` |
 | Audit | `LOGIN` (success and failure, with method), `LOGOUT`, `SECURITY_EVENT` with IP, user agent and request ID; never tokens | `audit.py` |
+| Storage credentials | Least-privilege `drive.file` scope; separate Drive consent bound to the initiating user; AES-256-GCM token encryption with row/field-bound associated data and key versioning; locked refresh; `needs_reauth` on revocation; revoke-and-wipe on disconnect; storage HTTP client separate from the Qdrant client | ADR-0010, `crypto.py`, `storage/` |
 | Containers | Non-root users; ports bound to 127.0.0.1; secrets via environment, never build args | `infrastructure/docker` |
 | Supply chain | Locked dependencies (uv.lock, package-lock.json); CI runs gitleaks, pip-audit, npm audit and CodeQL; Dependabot | `.github` |
 
@@ -27,7 +28,6 @@ All documents are treated as **sensitive by default**. This page lists controls 
 | Phase | Control |
 | --- | --- |
 | P6 | Mobile sign-in (ASWebAuthenticationSession / Custom Tabs) with tokens in the Keychain / Keystore |
-| P4 | AES-GCM token encryption with key versioning; least-privilege Drive scopes; `OAUTH_CONNECT`/`OAUTH_DISCONNECT` audit |
 | P5 | Upload validation by magic bytes, size limits, type allow-list, filename sanitization, ZIP-bomb protection; rate limiting |
 | P7–P12 | Prompt-injection defences (retrieved text as delimited data), retrieval always filtered by `user_id`, tool-call authorization, confirmation for destructive actions |
 | P16 | Trusted reverse proxy setting `X-Forwarded-For`, so audit IPs and rate limits use real client addresses (not trusted by default, see ADR-0009) |

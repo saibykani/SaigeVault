@@ -47,6 +47,18 @@ The `migrate` service applies Alembic migrations before `api` and `worker` start
    ```
 5. Run `docker compose up -d --build`. **Continue with Google** is now enabled.
 
+**Google Drive (same Google Cloud project):**
+
+1. Go to **APIs & Services → Library**, search for **Google Drive API** and click **Enable**.
+2. Under **OAuth consent screen → Data access / Scopes**, add `.../auth/drive.file`. It is a non-sensitive scope, so no Google review is needed for personal use.
+3. Generate an encryption key for stored Drive tokens and add it to `.env`:
+   ```bash
+   python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+   # TOKEN_ENCRYPTION_KEY=<output>
+   ```
+   Keep this key safe. If it's lost, Drive has to be reconnected (your files are unaffected).
+4. Restart, then go to **Settings → Storage → Connect**. Saige creates a private **Saige Vault** folder in your Drive.
+
 Without `JWT_SECRET` the API uses a temporary key, and everyone is signed out whenever it restarts.
 
 ## Run services from source (faster iteration)

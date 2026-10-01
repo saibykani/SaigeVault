@@ -3,13 +3,14 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import type * as React from "react";
+import { Suspense } from "react";
 
 import { FeatureNotice } from "@/components/common/feature-notice";
 import { useMounted } from "@/components/shell/theme-toggle";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DriveConnection } from "@/components/settings/drive-connection";
 import { SessionsList } from "@/components/settings/sessions-list";
 import { useSystemInfo } from "@/lib/api";
 
@@ -110,16 +111,9 @@ export function SettingsView() {
         title="Storage"
         description="Saige keeps your original files in your own cloud storage."
       >
-        <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-3">
-          <div>
-            <p className="text-sm font-medium">Google Drive</p>
-            <p className="text-xs text-muted-foreground">Not connected</p>
-          </div>
-          <Button size="sm" variant="outline" disabled>
-            Connect
-          </Button>
-        </div>
-        <FeatureNotice featureKey="googleDrive" />
+        <Suspense fallback={<Skeleton className="h-28" />}>
+          <DriveConnection />
+        </Suspense>
       </Section>
 
       <Section

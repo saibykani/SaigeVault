@@ -3,69 +3,21 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from google_fake import CLIENT_ID, FakeGoogle  # services/api/tests (pytest pythonpath)
+from google_fake import FakeGoogle  # services/api/tests (pytest pythonpath)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from saige_api.auth import sessions as sessions_module
-from saige_api.auth.google import GoogleOAuthClient
-from saige_api.core.config import Environment, Settings
-from saige_api.main import create_app
-from saige_api.resources import Resources
 
 pytestmark = pytest.mark.integration
 
-WEB = "http://web.test"
-REDIRECT_URI = f"{WEB}/api/v1/auth/google/callback"
-
-
-@pytest.fixture
-def make_client(
-    migrated_database: str, redis_url: str
-) -> Callable[..., AsyncIterator[tuple[httpx.AsyncClient, FakeGoogle]]]:
-    async def _make(**overrides: Any) -> AsyncIterator[tuple[httpx.AsyncClient, FakeGoogle]]:
-        values: dict[str, Any] = {
-            "app_env": Environment.TEST,
-            "log_json": False,
-            "log_level": "WARNING",
-            "database_url": migrated_database,
-            "redis_url": redis_url,
-            "jwt_secret": "j" * 48,
-            "web_public_url": WEB,
-            "google_client_id": CLIENT_ID,
-            "google_client_secret": "test-secret",
-            "google_redirect_uri": REDIRECT_URI,
-            "dev_login_enabled": True,
-            "auth_rate_limit_per_minute": 1000,
-        }
-        values.update(overrides)
-        settings = Settings(_env_file=None, **values)  # type: ignore[call-arg]
-        fake = FakeGoogle()
-
-        def factory(s: Settings) -> Resources:
-            resources = Resources.create(s)
-            resources.google = GoogleOAuthClient(
-                client_id=CLIENT_ID,
-                client_secret="test-secret",
-                redirect_uri=REDIRECT_URI,
-                http=httpx.AsyncClient(transport=fake.transport()),
-            )
-            return resources
-
-        app = create_app(settings, resource_factory=factory)
-        async with app.router.lifespan_context(app):
-            await app.state.resources.redis.flushdb()
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(transport=transport, base_url=WEB) as client:
-                yield client, fake
-
-    return _make
+WEB = "http://web.test"  # matches the make_client harness in conftest.py
 
 
 def csrf(client: httpx.AsyncClient) -> dict[str, str]:
@@ -93,7 +45,7 @@ async def dev_sign_in(client: httpx.AsyncClient, email: str | None = None) -> ht
 
 
 async def test_google_sign_in_sets_secure_session(make_client: Any, engine: AsyncEngine) -> None:
-    async for client, fake in make_client():
+    async for client, fake, _drive in make_client():
         fake.identity["sub"] = f"sub-{uuid.uuid4().hex}"
         fake.identity["email"] = f"alice-{uuid.uuid4().hex[:6]}@example.com"
         response = await google_sign_in(client, fake)
@@ -126,7 +78,7 @@ async def test_google_sign_in_sets_secure_session(make_client: Any, engine: Asyn
 
 
 async def test_state_is_single_use(make_client: Any) -> None:
-    async for client, fake in make_client():
+    async for client, fake, _drive in make_client():
         start = await client.get("/api/v1/auth/google/login")
         query = parse_qs(urlparse(start.headers["location"]).query)
         state, nonce = query["state"][0], query["nonce"][0]
@@ -152,7 +104,7 @@ async def test_state_is_single_use(make_client: Any) -> None:
 async def test_rejected_identities_do_not_sign_in(
     make_client: Any, mutate: Callable[[FakeGoogle], None], error: str
 ) -> None:
-    async for client, fake in make_client():
+    async for client, fake, _drive in make_client():
         mutate(fake)
         response = await google_sign_in(client, fake)
         assert response.headers["location"] == f"{WEB}/login?error={error}"
@@ -161,7 +113,7 @@ async def test_rejected_identities_do_not_sign_in(
 
 
 async def test_open_redirect_is_neutralised(make_client: Any) -> None:
-    async for client, fake in make_client():
+    async for client, fake, _drive in make_client():
         fake.identity["sub"] = f"sub-{uuid.uuid4().hex}"
         response = await google_sign_in(client, fake, next_path="//evil.example/steal")
         assert response.headers["location"] == f"{WEB}/"
@@ -171,7 +123,7 @@ async def test_refresh_rotates_and_detects_reuse(
     make_client: Any, monkeypatch: pytest.MonkeyPatch, engine: AsyncEngine
 ) -> None:
     monkeypatch.setattr(sessions_module, "ROTATION_GRACE", sessions_module.timedelta(0))
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         await dev_sign_in(client)
         old_refresh = client.cookies.get("saige_refresh")
 
@@ -202,7 +154,7 @@ async def test_refresh_rotates_and_detects_reuse(
 
 
 async def test_csrf_required_for_cookie_mutations(make_client: Any) -> None:
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         await dev_sign_in(client)
         assert (await client.post("/api/v1/auth/refresh")).status_code == 403
         assert (await client.post("/api/v1/auth/logout")).status_code == 403
@@ -211,7 +163,7 @@ async def test_csrf_required_for_cookie_mutations(make_client: Any) -> None:
 
 
 async def test_logout_ends_session(make_client: Any) -> None:
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         await dev_sign_in(client)
         stale_access = client.cookies.get("saige_access")
         assert (await client.post("/api/v1/auth/logout", headers=csrf(client))).status_code == 204
@@ -222,7 +174,7 @@ async def test_logout_ends_session(make_client: Any) -> None:
 
 
 async def test_list_and_revoke_sessions(make_client: Any) -> None:
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         email = f"multi-{uuid.uuid4().hex[:6]}@example.com"
         other = httpx.AsyncClient(transport=client._transport, base_url=WEB)
         await dev_sign_in(other, email)
@@ -240,7 +192,7 @@ async def test_list_and_revoke_sessions(make_client: Any) -> None:
 
 
 async def test_cannot_revoke_another_users_session(make_client: Any) -> None:
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         victim = httpx.AsyncClient(transport=client._transport, base_url=WEB)
         victim_session = (await dev_sign_in(victim)).json()["session_id"]
         await dev_sign_in(client)
@@ -254,7 +206,7 @@ async def test_cannot_revoke_another_users_session(make_client: Any) -> None:
 
 
 async def test_bearer_tokens_for_api_clients(make_client: Any) -> None:
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         await dev_sign_in(client)
         refresh_token = client.cookies.get("saige_refresh")
         api = httpx.AsyncClient(transport=client._transport, base_url=WEB)
@@ -273,13 +225,13 @@ async def test_bearer_tokens_for_api_clients(make_client: Any) -> None:
 
 
 async def test_dev_login_hidden_when_disabled(make_client: Any) -> None:
-    async for client, _fake in make_client(dev_login_enabled=False):
+    async for client, _fake, _drive in make_client(dev_login_enabled=False):
         response = await client.post("/api/v1/auth/dev-login", json={"email": "x@example.com"})
         assert response.status_code == 404
 
 
 async def test_auth_endpoints_are_rate_limited(make_client: Any) -> None:
-    async for client, _fake in make_client(auth_rate_limit_per_minute=3):
+    async for client, _fake, _drive in make_client(auth_rate_limit_per_minute=3):
         codes = [
             (
                 await client.post("/api/v1/auth/dev-login", json={"email": "r@example.com"})
@@ -291,7 +243,7 @@ async def test_auth_endpoints_are_rate_limited(make_client: Any) -> None:
 
 
 async def test_unauthenticated_requests_rejected(make_client: Any) -> None:
-    async for client, _fake in make_client():
+    async for client, _fake, _drive in make_client():
         for path in ("/api/v1/auth/session", "/api/v1/auth/sessions"):
             response = await client.get(path)
             assert response.status_code == 401

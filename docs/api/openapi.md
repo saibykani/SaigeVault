@@ -41,11 +41,18 @@
 | GET | `/api/v1/auth/sessions` | Active sessions for this user |
 | DELETE | `/api/v1/auth/sessions/{id}` | Revokes one of your sessions (`404` if not yours) |
 
+| GET | `/api/v1/storage/connections` | Your storage connections (status, account, scopes; never credentials) |
+| GET | `/api/v1/storage/google-drive/connect?next=` | Starts the Drive consent flow (302 to Google). Requires sign-in; `503` if Drive isn't configured |
+| POST | `/api/v1/storage/connections/{id}/disconnect` | Revokes access at Google and deletes stored credentials; files stay in Drive |
+| GET | `/api/v1/storage/connections/{id}/quota` | Google account storage usage. `409 storage_reauth_required` if access was revoked |
+
+Storage errors use the standard envelope with codes `storage_not_found` (404), `storage_reauth_required` (409), `storage_permission_denied` (403), `storage_quota_exceeded` (507) and `storage_unavailable` (503).
+
 **Authentication:** send `Authorization: Bearer <access token>`, or use the browser session cookies. Cookie-authenticated `POST`/`PUT`/`PATCH`/`DELETE` require `X-CSRF-Token` equal to the `saige_csrf` cookie.
 
 ## Planned resource groups
 
-`/users` · `/storage` (P4) · `/files`, `/folders`, `/collections`, `/tags` (P5) · `/documents` (P7) · `/search` (P8) · `/ai`, `/chat` (P10–P11) · `/agents` (P12) · `/sync` (P13) · `/settings`.
+`/users` · `/files`, `/folders`, `/collections`, `/tags` (P5) · `/documents` (P7) · `/search` (P8) · `/ai`, `/chat` (P10–P11) · `/agents` (P12) · `/sync` (P13) · `/settings`.
 
 ## Clients
 

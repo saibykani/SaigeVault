@@ -91,3 +91,68 @@ async def engine(migrated_database: str) -> AsyncIterator[AsyncEngine]:
         yield engine
     finally:
         await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Full application harness: real PostgreSQL + Redis, fake Google + fake Drive.
+# ---------------------------------------------------------------------------
+
+from typing import Any  # noqa: E402
+
+import httpx  # noqa: E402
+from drive_fake import FakeDrive  # noqa: E402  (services/api/tests on pythonpath)
+from google_fake import CLIENT_ID, FakeGoogle  # noqa: E402
+
+from saige_api.auth.google import GoogleOAuthClient  # noqa: E402
+from saige_api.core.config import Environment, Settings  # noqa: E402
+from saige_api.crypto import generate_key  # noqa: E402
+from saige_api.main import create_app  # noqa: E402
+from saige_api.resources import Resources  # noqa: E402
+
+WEB = "http://web.test"
+REDIRECT_URI = f"{WEB}/api/v1/auth/google/callback"
+Harness = tuple[httpx.AsyncClient, FakeGoogle, FakeDrive]
+
+
+@pytest.fixture
+def make_client(migrated_database: str, redis_url: str) -> Any:
+    async def _make(**overrides: Any) -> AsyncIterator[Harness]:
+        values: dict[str, Any] = {
+            "app_env": Environment.TEST,
+            "log_json": False,
+            "log_level": "WARNING",
+            "database_url": migrated_database,
+            "redis_url": redis_url,
+            "jwt_secret": "j" * 48,
+            "token_encryption_key": generate_key(),
+            "web_public_url": WEB,
+            "google_client_id": CLIENT_ID,
+            "google_client_secret": "test-secret",
+            "google_redirect_uri": REDIRECT_URI,
+            "dev_login_enabled": True,
+            "auth_rate_limit_per_minute": 1000,
+        }
+        values.update(overrides)
+        settings = Settings(_env_file=None, **values)  # type: ignore[call-arg]
+        google, drive = FakeGoogle(), FakeDrive()
+
+        def factory(s: Settings) -> Resources:
+            resources = Resources.create(s)
+            resources.external_http = httpx.AsyncClient(transport=google.transport(drive))
+            if s.google_oauth_configured:
+                resources.google = GoogleOAuthClient(
+                    client_id=CLIENT_ID,
+                    client_secret="test-secret",
+                    redirect_uri=REDIRECT_URI,
+                    http=resources.external_http,
+                )
+            return resources
+
+        app = create_app(settings, resource_factory=factory)
+        async with app.router.lifespan_context(app):
+            await app.state.resources.redis.flushdb()
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url=WEB) as client:
+                yield client, google, drive
+
+    return _make
