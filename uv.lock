@@ -1077,7 +1077,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.15" },
     { name = "redis", specifier = ">=7.0,<8" },
     { name = "saige-ai", editable = "services/ai" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.1" },
     { name = "structlog", specifier = ">=26.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54" },
 ]
