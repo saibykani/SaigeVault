@@ -81,7 +81,7 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npx playwright test
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
@@ -97,7 +97,7 @@ jobs:
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
       - name: Build and test
         run: bash apps/ios/scripts/ci-test.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         # Diagnostics only: never fail the build because the bundle upload failed.
         continue-on-error: true
@@ -126,7 +126,7 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug testDebugUnitTest lintDebug
       - if: hashFiles('apps/android/gradlew') != ''
         run: ./gradlew --no-daemon bundleRelease -Psaige.apiBaseUrl=https://vault.invalid
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: hashFiles('apps/android/gradlew') != ''
         with:
           name: android-debug-apk
