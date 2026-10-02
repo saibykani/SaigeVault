@@ -30,7 +30,8 @@
 | AI layer | `services/ai` | **Built:** provider protocols, processing-policy gate. Adapters are Planned (P9–P11) |
 | Auth | `services/api/src/saige_api/auth` | **Built (P3):** Google OIDC, rotating sessions, CSRF, rate limits, audit (ADR-0009) |
 | Storage | `services/api/src/saige_api/storage` | **Built (P4):** `StorageProvider` interface, Google Drive provider (folders, list, multipart and resumable upload, streaming download, rename, move, trash/restore, delete, revisions, change tokens, quota), encrypted connections (ADR-0010) |
-| Web | `apps/web` | **Built:** app shell, all primary screens, command palette, themes, live system status, sign-in, account menu, session management |
+| Files | `services/api/src/saige_api/files` | **Built (P5):** upload validation, vault service (folders, files, trash, tags, collections, stats), files API (ADR-0011) |
+| Web | `apps/web` | **Built:** app shell, all primary screens, command palette, themes, live system status, sign-in, account menu, session management, file explorer (list/grid, virtualised, multi-select, drag-and-drop upload with progress, keyboard shortcuts), PDF/image/text preview, collections, live dashboard |
 | iOS | `apps/ios` | **Built:** app shell, tabs, App Lock, privacy shield, live server status |
 | Android | `apps/android` | In progress |
 | Shared TS packages | `packages/*` | **Built:** generated API client and enums, formatting utilities |
@@ -66,4 +67,4 @@ Typed `Settings` (`saige_api.core.config`). Production refuses to start without 
 
 ## Roadmap
 
-Phases follow the master plan: P2 database ✓ · P3 auth ✓ · P4 Google Drive ✓ · P5 web file management · P6 mobile · P7 document processing · P8 search · P9 Qdrant · P10 RAG · P11 chat · P12 agent · P13 sync · P14 security hardening · P15 testing · P16 deployment.
+Phases follow the master plan: P2 database ✓ · P3 auth ✓ · P4 Google Drive ✓ · P5 web file management ✓ · P6 mobile · P7 document processing · P8 search · P9 Qdrant · P10 RAG · P11 chat · P12 agent · P13 sync · P14 security hardening · P15 testing · P16 deployment.

@@ -2,6 +2,7 @@
 
 import type * as React from "react";
 
+import { UploadManager } from "@/components/files/upload-manager";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
 import { AppSidebar, MobileNav } from "./app-sidebar";
@@ -27,6 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
       <MobileNav />
       <CommandPalette />
+      <UploadManager />
     </div>
   );
 }

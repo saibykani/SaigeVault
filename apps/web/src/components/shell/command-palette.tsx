@@ -4,12 +4,12 @@ import { Command } from "cmdk";
 import { FolderPlus, type LucideIcon, Moon, Search, Sparkles, Sun, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { toast } from "sonner";
 
 import { PhaseBadge } from "@/components/common/feature-notice";
+import { openFilePicker } from "@/components/files/upload-manager";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
-import { type FeatureKey, feature } from "@/lib/features";
+import type { FeatureKey } from "@/lib/features";
 import { PRIMARY_NAV, SECONDARY_NAV } from "@/lib/navigation";
 import { useUIStore } from "@/stores/ui-store";
 
@@ -38,25 +38,20 @@ export function CommandPalette() {
     setOpen(false);
   }
 
-  function notYet(key: FeatureKey) {
-    const f = feature(key);
-    toast.info(`${f.label} arrives in Phase ${f.phase}`, { description: f.description });
-  }
-
   const actions: PaletteAction[] = [
     {
       id: "upload",
       label: "Upload files",
       icon: Upload,
-      feature: "upload",
-      run: () => notYet("upload"),
+      keywords: ["add", "import"],
+      run: () => openFilePicker(),
     },
     {
       id: "new-folder",
-      label: "Create folder",
+      label: "Go to files to create a folder",
       icon: FolderPlus,
-      feature: "files",
-      run: () => notYet("files"),
+      keywords: ["new folder"],
+      run: () => router.push("/files"),
     },
     {
       id: "search-files",

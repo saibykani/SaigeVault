@@ -106,7 +106,9 @@ class SecurityHeadersMiddleware:
                 headers["Permissions-Policy"] = (
                     "camera=(), microphone=(), geolocation=(), payment=()"
                 )
-                headers["Content-Security-Policy"] = DOCS_CSP if is_docs else API_CSP
+                # Routes may set a stricter policy (e.g. sandboxed file content).
+                if "content-security-policy" not in headers:
+                    headers["Content-Security-Policy"] = DOCS_CSP if is_docs else API_CSP
                 if not is_docs and "cache-control" not in headers:
                     headers["Cache-Control"] = "no-store"
                 if self.enable_hsts:

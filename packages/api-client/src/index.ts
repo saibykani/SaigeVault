@@ -12,6 +12,13 @@ export type SessionSummary = Schemas["SessionSummary"];
 export type UserProfile = Schemas["UserProfile"];
 export type StorageConnectionSummary = Schemas["StorageConnectionSummary"];
 export type StorageQuotaResponse = Schemas["StorageQuotaResponse"];
+export type FileSummary = Schemas["FileSummary"];
+export type FolderSummary = Schemas["FolderSummary"];
+export type FileListResponse = Schemas["FileListResponse"];
+export type FileStats = Schemas["FileStats"];
+export type TagRef = Schemas["TagRef"];
+export type CollectionSummary = Schemas["CollectionSummary"];
+export type CollectionDetail = Schemas["CollectionDetail"];
 
 export { createAuthFetch, CSRF_COOKIE, CSRF_HEADER, readCookie } from "./auth-fetch";
 export type { AuthFetchOptions } from "./auth-fetch";

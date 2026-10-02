@@ -45,25 +45,25 @@ export const FEATURES: Record<FeatureKey, Feature> = {
   files: {
     label: "File management",
     phase: 5,
-    available: false,
+    available: true,
     description: "Browse, rename, move, favourite, delete and restore your files.",
   },
   upload: {
     label: "Uploads",
     phase: 5,
-    available: false,
+    available: true,
     description: "Upload files with server-side type validation and integrity checks.",
   },
   collections: {
     label: "Collections",
     phase: 5,
-    available: false,
+    available: true,
     description: "Group files virtually — one file can live in many collections without copies.",
   },
   tags: {
     label: "Tags",
     phase: 5,
-    available: false,
+    available: true,
     description: "Manual tags plus AI-suggested tags that you confirm.",
   },
   processing: {

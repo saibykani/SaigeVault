@@ -39,6 +39,10 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    # Fetch server-generated values (created_at/updated_at) via RETURNING on
+    # INSERT and UPDATE, so attributes never expire into lazy loads, which are
+    # illegal under asyncio.
+    __mapper_args__ = {"eager_defaults": True}
     type_annotation_map = {
         dict[str, Any]: JSONB,
         list[Any]: JSONB,

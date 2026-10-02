@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     # Least privilege by default: Saige only sees files it created (its own
     # "Saige Vault" folder), never the rest of the user's Drive.
     google_drive_scope: str = "https://www.googleapis.com/auth/drive.file"
+    max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024, le=5 * 1024**3)
+    upload_rate_limit_per_minute: int = Field(default=120, ge=1)
     google_drive_root_folder_name: str = Field(default="Saige Vault", min_length=1, max_length=100)
 
     ai_processing_policy: AIProcessingPolicy = AIProcessingPolicy.DISABLED

@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "codegen": "openapi-typescript ../../docs/api/openapi.json -o src/schema.gen.ts",
+    "codegen": "openapi-typescript ../../docs/api/openapi.json --default-non-nullable false -o src/schema.gen.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

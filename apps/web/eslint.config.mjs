@@ -20,6 +20,11 @@ const config = [
       "no-console": ["error", { allow: ["warn", "error"] }],
     },
   },
+  {
+    // CLI test runners report progress on stdout.
+    files: ["e2e/full-stack/**"],
+    rules: { "no-console": "off" },
+  },
 ];
 
 export default config;

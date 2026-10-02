@@ -46,13 +46,29 @@
 | POST | `/api/v1/storage/connections/{id}/disconnect` | Revokes access at Google and deletes stored credentials; files stay in Drive |
 | GET | `/api/v1/storage/connections/{id}/quota` | Google account storage usage. `409 storage_reauth_required` if access was revoked |
 
+| GET | `/api/v1/files` | List files with `folder_id`, `q` (name), `type`, `document_type`, `starred`, `trashed`, `tag`, `collection_id`, `all_folders`, `sort`, `order`, `limit`, `offset`. Returns subfolders + breadcrumbs when browsing |
+| POST | `/api/v1/files` | Upload (`multipart/form-data`: `file`, optional `folder_id`). `413 file_too_large`, `415 unsupported_type` / `content_mismatch`, `409 storage_not_connected` |
+| GET | `/api/v1/files/stats` | Counts and bytes for the dashboard |
+| GET / PATCH | `/api/v1/files/{id}` | Get; rename / move (`folder_id` or `move_to_root`) / star / reclassify (`document_type`, recorded as a user override) |
+| GET | `/api/v1/files/{id}/content?inline=` | Stream content (sandboxed; see ADR-0011) |
+| DELETE | `/api/v1/files/{id}` | Move to trash (storage trash too) |
+| POST | `/api/v1/files/{id}/restore` | Restore from trash (back to root if its folder is gone) |
+| DELETE | `/api/v1/files/{id}/permanent` | Delete forever, including from storage. Only for trashed files (`409` otherwise) |
+| POST | `/api/v1/files/bulk` | `trash` / `restore` / `star` / `unstar` / `move` for up to 500 files. Returns `succeeded` and `failed` IDs |
+| PUT | `/api/v1/files/{id}/tags` | Replace the file's manual tags (normalised, `#` optional) |
+| POST / PATCH / DELETE | `/api/v1/folders[/{id}]` | Create, rename/move (no cycles), delete (empty folders only) |
+| GET / DELETE | `/api/v1/tags[/{id}]` | List or delete your tags |
+| GET / POST | `/api/v1/collections` | List (with file counts) or create (names unique, case-insensitive) |
+| GET / PATCH / DELETE | `/api/v1/collections/{id}` | Detail with files, update, delete (files are kept) |
+| POST / DELETE | `/api/v1/collections/{id}/files[/{file_id}]` | Add files (foreign IDs are ignored) or remove one |
+
 Storage errors use the standard envelope with codes `storage_not_found` (404), `storage_reauth_required` (409), `storage_permission_denied` (403), `storage_quota_exceeded` (507) and `storage_unavailable` (503).
 
 **Authentication:** send `Authorization: Bearer <access token>`, or use the browser session cookies. Cookie-authenticated `POST`/`PUT`/`PATCH`/`DELETE` require `X-CSRF-Token` equal to the `saige_csrf` cookie.
 
 ## Planned resource groups
 
-`/users` · `/files`, `/folders`, `/collections`, `/tags` (P5) · `/documents` (P7) · `/search` (P8) · `/ai`, `/chat` (P10–P11) · `/agents` (P12) · `/sync` (P13) · `/settings`.
+`/users` · `/documents` (P7) · `/search` (P8) · `/ai`, `/chat` (P10–P11) · `/agents` (P12) · `/sync` (P13) · `/settings`.
 
 ## Clients
 

@@ -1,31 +1,15 @@
-import {
-  FileText,
-  HardDrive,
-  Image as ImageIcon,
-  Library,
-  ShieldCheck,
-  Sparkles,
-  Star,
-} from "lucide-react";
+import { Library, ShieldCheck, Sparkles, Star } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 import { SetupChecklist } from "@/components/dashboard/setup-checklist";
-import { EmptyState } from "@/components/common/empty-state";
-import { FeatureNotice } from "@/components/common/feature-notice";
+import { RecentFiles, VaultMetrics } from "@/components/dashboard/vault-overview";
 import { PageHeader } from "@/components/common/page-header";
 import { ReadinessPanel } from "@/components/system/readiness-panel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Dashboard" };
-
-const METRICS = [
-  { label: "Files", icon: FileText },
-  { label: "Storage used", icon: HardDrive },
-  { label: "Images", icon: ImageIcon },
-  { label: "AI indexed", icon: Sparkles },
-] as const;
 
 export default function DashboardPage() {
   return (
@@ -44,43 +28,8 @@ export default function DashboardPage() {
       />
       <div className="grid gap-4 p-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-4">
-          {/* Metrics show "—" until the files API exists: no invented numbers. */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {METRICS.map(({ label, icon: Icon }) => (
-              <Card key={label} className="px-4 py-3">
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <Icon className="size-3.5" aria-hidden="true" />
-                  {label}
-                </div>
-                <p
-                  className="mt-1.5 text-2xl font-semibold tabular-nums"
-                  aria-label={`${label}: no data yet`}
-                >
-                  —
-                </p>
-              </Card>
-            ))}
-          </div>
-
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Recent files</CardTitle>
-                <CardDescription className="mt-1">
-                  Recently added and opened documents.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <EmptyState
-                icon={FileText}
-                title="No files yet"
-                description="Once Google Drive is connected, your recent documents appear here."
-                className="py-8"
-              />
-              <FeatureNotice featureKey="files" />
-            </CardContent>
-          </Card>
+          <VaultMetrics />
+          <RecentFiles />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
@@ -90,7 +39,10 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Star important documents — passport, degree, latest payslip — for one-tap access.
+                Star important documents — passport, degree, latest payslip — for one-tap access.{" "}
+                <Link href="/files?view=starred" className="text-primary hover:underline">
+                  View starred
+                </Link>
               </CardContent>
             </Card>
             <Card>
@@ -102,7 +54,10 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 Group documents virtually, e.g. <em>My Career</em> or <em>Finance</em>, without
-                duplicating files.
+                duplicating files.{" "}
+                <Link href="/collections" className="text-primary hover:underline">
+                  Open collections
+                </Link>
               </CardContent>
             </Card>
           </div>
