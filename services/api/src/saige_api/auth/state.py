@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import json
 import secrets
-from collections.abc import Awaitable
 from dataclasses import asdict, dataclass
-from typing import cast
 
-from redis.asyncio import Redis
+from saige_api.kv import KeyValueStore
 
 STATE_TTL_SECONDS = 600
 _PREFIX = "saige:oauth_state:"
@@ -29,19 +27,21 @@ class PendingLogin:
 
 
 class OAuthStateStore:
-    def __init__(self, redis: Redis) -> None:
-        self._redis = redis
+    def __init__(self, store: KeyValueStore) -> None:
+        self._store = store
 
     async def create(self, pending: PendingLogin) -> str:
         state = secrets.token_urlsafe(32)
-        await self._redis.set(_PREFIX + state, json.dumps(asdict(pending)), ex=STATE_TTL_SECONDS)
+        await self._store.set(
+            _PREFIX + state, json.dumps(asdict(pending)), ttl_seconds=STATE_TTL_SECONDS
+        )
         return state
 
     async def consume(self, state: str) -> PendingLogin | None:
         """Atomically fetch and delete, so a state can never be replayed."""
         if not state or len(state) > 128:
             return None
-        raw = await cast(Awaitable[bytes | None], self._redis.getdel(_PREFIX + state))
+        raw = await self._store.pop(_PREFIX + state)
         if raw is None:
             return None
         data = json.loads(raw)

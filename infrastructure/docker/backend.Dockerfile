@@ -39,7 +39,7 @@ COPY --from=builder /opt/venv /opt/venv
 # Migrations + Alembic config (paths mirror the repository layout).
 COPY database/migrations database/migrations
 COPY services/api/alembic.ini services/api/alembic.ini
+COPY --chmod=0755 infrastructure/docker/api-entrypoint.sh /usr/local/bin/saige-api-entrypoint
 USER saige
 EXPOSE 8000
-CMD ["uvicorn", "saige_api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--no-server-header"]
+CMD ["saige-api-entrypoint"]

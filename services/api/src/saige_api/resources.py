@@ -24,6 +24,7 @@ from saige_api.health import (
     RedisCheck,
     WorkerHeartbeatCheck,
 )
+from saige_api.kv import KeyValueStore, MemoryStore, RedisStore
 from saige_api.ratelimit import RateLimiter
 
 logger = get_logger("saige_api.resources")
@@ -43,7 +44,8 @@ class Resources:
     settings: Settings
     engine: AsyncEngine
     session_factory: async_sessionmaker[AsyncSession]
-    redis: Redis
+    redis: Redis | None
+    kv: KeyValueStore
     # Separate clients: the Qdrant client carries the Qdrant API key and must
     # never be used for third-party calls.
     qdrant_http: httpx.AsyncClient
@@ -59,7 +61,14 @@ class Resources:
     @classmethod
     def create(cls, settings: Settings) -> Resources:
         engine = create_engine(settings)
-        redis = Redis.from_url(settings.redis_url, socket_connect_timeout=2, socket_timeout=5)
+        redis = (
+            Redis.from_url(settings.redis_url, socket_connect_timeout=2, socket_timeout=5)
+            if settings.redis_url
+            else None
+        )
+        if redis is None:
+            logger.warning("redis_disabled", reason="REDIS_URL not set; using in-process state")
+        kv: KeyValueStore = RedisStore(redis) if redis is not None else MemoryStore()
         qdrant_headers = (
             {"api-key": settings.qdrant_api_key.get_secret_value()}
             if settings.qdrant_api_key
@@ -81,11 +90,12 @@ class Resources:
             engine=engine,
             session_factory=create_session_factory(engine),
             redis=redis,
+            kv=kv,
             qdrant_http=qdrant_http,
             external_http=external_http,
             tokens=TokenService(_signing_key(settings), settings.access_token_ttl_seconds),
-            oauth_state=OAuthStateStore(redis),
-            rate_limiter=RateLimiter(redis),
+            oauth_state=OAuthStateStore(kv),
+            rate_limiter=RateLimiter(kv),
             google=google,
             cipher=(
                 TokenCipher.from_single_key(settings.token_encryption_key.get_secret_value())
@@ -93,12 +103,14 @@ class Resources:
                 else None
             ),
         )
-        resources.health_checks = [
-            DatabaseCheck(engine),
-            RedisCheck(redis),
-            QdrantCheck(qdrant_http, settings.qdrant_url),
-            WorkerHeartbeatCheck(redis, settings.worker_heartbeat_max_age_seconds),
-        ]
+        checks: list[HealthCheck] = [DatabaseCheck(engine)]
+        if redis is not None:
+            checks += [
+                RedisCheck(redis),
+                WorkerHeartbeatCheck(redis, settings.worker_heartbeat_max_age_seconds),
+            ]
+        checks.append(QdrantCheck(qdrant_http, settings.qdrant_url))
+        resources.health_checks = checks
         return resources
 
     @property
@@ -108,5 +120,6 @@ class Resources:
     async def aclose(self) -> None:
         await self.qdrant_http.aclose()
         await self.external_http.aclose()
-        await self.redis.aclose()
+        if self.redis is not None:
+            await self.redis.aclose()
         await self.engine.dispose()

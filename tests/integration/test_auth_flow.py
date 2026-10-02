@@ -250,3 +250,24 @@ async def test_unauthenticated_requests_rejected(make_client: Any) -> None:
             assert response.json()["error"]["code"] == "unauthorized"
         garbage = {"Authorization": "Bearer not.a.jwt"}
         assert (await client.get("/api/v1/auth/session", headers=garbage)).status_code == 401
+
+
+async def test_works_without_redis(make_client: Any) -> None:
+    """A single free-tier instance can run with no Redis: state is in-process."""
+    async for client, fake, _drive in make_client(redis_url=None, auth_rate_limit_per_minute=3):
+        info = (await client.get("/ready")).json()
+        assert "redis" not in {c["name"] for c in info["checks"]}
+        assert info["status"] != "not_ready"
+
+        fake.identity["sub"] = f"sub-{uuid.uuid4().hex}"
+        response = await google_sign_in(client, fake)  # OAuth state round-trips in memory
+        assert response.headers["location"] == f"{WEB}/files"
+        assert (await client.get("/api/v1/auth/session")).status_code == 200
+
+        codes = [
+            (
+                await client.post("/api/v1/auth/dev-login", json={"email": "m@example.com"})
+            ).status_code
+            for _ in range(4)
+        ]
+        assert codes[-1] == 429  # rate limiting still enforced

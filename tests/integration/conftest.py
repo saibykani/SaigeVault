@@ -150,7 +150,8 @@ def make_client(migrated_database: str, redis_url: str) -> Any:
 
         app = create_app(settings, resource_factory=factory)
         async with app.router.lifespan_context(app):
-            await app.state.resources.redis.flushdb()
+            if app.state.resources.redis is not None:
+                await app.state.resources.redis.flushdb()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url=WEB) as client:
                 yield client, google, drive

@@ -37,6 +37,8 @@ async def heartbeat(ctx: dict[str, Any]) -> None:
 async def startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     configure_logging(settings.log_level, json_output=settings.log_json)
+    if not settings.redis_url:
+        raise RuntimeError("The worker requires REDIS_URL (its job queue lives in Redis).")
     ctx["redis"] = Redis.from_url(settings.redis_url, socket_connect_timeout=2)
     await publish_heartbeat(ctx["redis"])
     logger.info("worker_startup", version=__version__, environment=settings.app_env.value)
@@ -50,7 +52,7 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 def build_settings() -> dict[str, Any]:
-    queue = Queue.from_url(get_settings().redis_url, name=QUEUE_NAME)
+    queue = Queue.from_url(get_settings().redis_url or "redis://localhost:6379/0", name=QUEUE_NAME)
     return {
         "queue": queue,
         "functions": [],

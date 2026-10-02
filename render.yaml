@@ -13,11 +13,7 @@ services:
     region: singapore
     dockerfilePath: ./infrastructure/docker/backend.Dockerfile
     dockerContext: .
-    # Apply database migrations, then start the API on Render's $PORT.
-    dockerCommand: >-
-      sh -c "alembic -c services/api/alembic.ini upgrade head &&
-      exec uvicorn saige_api.main:create_app --factory --host 0.0.0.0
-      --port $PORT --proxy-headers --no-server-header"
+    # The image's entrypoint applies migrations and serves on Render's $PORT.
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -28,9 +24,10 @@ services:
       # Paste from Neon (Connection string). Any postgresql:// URL works.
       - key: DATABASE_URL
         sync: false
-      # Paste from Upstash (rediss://default:...@...upstash.io:6379).
+      # Optional: Upstash rediss:// URL. Leave empty to keep state in-process
+      # (fine for a single free instance).
       - key: REDIS_URL
-        sync: false
+        value: ""
       - key: JWT_SECRET
         generateValue: true
       - key: TOKEN_ENCRYPTION_KEY

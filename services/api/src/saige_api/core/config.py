@@ -73,7 +73,9 @@ class Settings(BaseSettings):
     database_pool_size: int = 10
     database_max_overflow: int = 10
 
-    redis_url: str = "redis://localhost:6379/0"
+    # Optional. Without Redis, short-lived state is kept in-process, which is
+    # only correct for a single API instance (fine for one free container).
+    redis_url: str | None = "redis://localhost:6379/0"
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: SecretStr | None = None
@@ -104,7 +106,8 @@ class Settings(BaseSettings):
 
     ai_processing_policy: AIProcessingPolicy = AIProcessingPolicy.DISABLED
 
-    readiness_timeout_seconds: float = 2.0
+    # Generous: serverless databases (e.g. Neon free tier) take seconds to wake.
+    readiness_timeout_seconds: float = 8.0
     worker_heartbeat_max_age_seconds: int = 60
 
     @field_validator("cors_allowed_origins", mode="before")
@@ -120,6 +123,7 @@ class Settings(BaseSettings):
         "token_encryption_key",
         "google_client_secret",
         "cookie_secure",
+        "redis_url",
         mode="before",
     )
     @classmethod
