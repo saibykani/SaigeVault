@@ -99,6 +99,8 @@ jobs:
         run: bash apps/ios/scripts/ci-test.sh
       - uses: actions/upload-artifact@v4
         if: always()
+        # Diagnostics only: never fail the build because the bundle upload failed.
+        continue-on-error: true
         with:
           name: ios-test-results
           path: apps/ios/build/TestResults.xcresult
