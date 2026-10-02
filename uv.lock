@@ -1186,7 +1186,7 @@ dependencies = [
 requires-dist = [
     { name = "saige-ai", editable = "services/ai" },
     { name = "saige-api", editable = "services/api" },
-    { name = "saq", extras = ["redis", "hiredis"], specifier = ">=0.26" },
+    { name = "saq", extras = ["redis", "hiredis"], specifier = ">=0.26.4" },
 ]
 
 [[package]]
