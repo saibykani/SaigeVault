@@ -1161,7 +1161,7 @@ dev = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "mypy", specifier = ">=2.3" },
     { name = "pip-audit", specifier = ">=2.9" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pytest", specifier = ">=9.1" },
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "pytest-cov", specifier = ">=6.0" },
