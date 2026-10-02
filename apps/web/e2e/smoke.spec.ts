@@ -95,17 +95,16 @@ test.describe("desktop", () => {
     await expect(page.locator("html")).toHaveClass(/dark/);
   });
 
-  test("dropping a file does not upload it while uploads are unavailable", async ({ page }) => {
-    const requests: string[] = [];
+  test("upload is disabled until storage is connected, and nothing is sent", async ({ page }) => {
+    const writes: string[] = [];
     page.on("request", (r) => {
-      if (r.method() !== "GET") requests.push(r.url());
+      if (r.method() !== "GET") writes.push(r.url());
     });
     await page.goto("/files");
-    // aria-disabled (not disabled): announced as unavailable, but still clickable
-    // so it can explain why. Playwright treats aria-disabled as non-actionable.
-    await page.getByRole("button", { name: "Upload", exact: true }).click({ force: true });
-    await expect(page.getByText(/Uploads arrive in Phase/)).toBeVisible();
-    expect(requests).toEqual([]);
+    // No backend in this suite: no session, so no Drive connection.
+    await expect(page.getByRole("button", { name: "Upload", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "New folder" })).toBeDisabled();
+    expect(writes).toEqual([]);
   });
 });
 
