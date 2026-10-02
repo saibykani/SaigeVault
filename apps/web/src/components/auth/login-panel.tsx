@@ -53,7 +53,7 @@ export function LoginPanel() {
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
   const errorCode = params.get("error");
-  const { data: info, isLoading, isError } = useSystemInfo();
+  const { data: info, isLoading, isError, failureCount, refetch } = useSystemInfo();
   const devLogin = useDevLogin();
   const [email, setEmail] = useState("");
 
@@ -81,12 +81,27 @@ export function LoginPanel() {
         </p>
       ) : null}
 
-      {isLoading ? (
+      {isLoading && failureCount > 0 ? (
+        <div
+          role="status"
+          className="mt-6 flex items-start gap-2.5 rounded-md bg-muted px-3 py-2.5 text-sm"
+        >
+          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+          <span className="text-muted-foreground">
+            Waking up the server… This can take up to a minute after it has been idle.
+          </span>
+        </div>
+      ) : isLoading ? (
         <Skeleton className="mt-6 h-9" />
       ) : isError ? (
-        <p role="alert" className="mt-6 text-sm text-destructive">
-          The Saige server is unreachable, so sign-in isn&apos;t available right now.
-        </p>
+        <div role="alert" className="mt-6 text-sm">
+          <p className="text-destructive">
+            The Saige server didn&apos;t respond, so sign-in isn&apos;t available right now.
+          </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </div>
       ) : info?.google_oauth_configured ? (
         <Button asChild variant="outline" className="mt-6 w-full">
           <a href={googleHref}>

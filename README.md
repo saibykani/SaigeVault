@@ -34,6 +34,8 @@ docker compose up -d --build
 - API: http://localhost:8000/docs
 - Readiness: http://localhost:8000/ready
 
+**Put it online for free:** see [docs/deployment/free-hosting.md](docs/deployment/free-hosting.md) (Vercel + Render + Neon + Upstash).
+
 Port already in use? Run `WEB_PORT=3001 API_PORT=8001 docker compose up -d` (see [local development](docs/deployment/local.md)).
 
 **iPhone:** see [docs/mobile/ios.md](docs/mobile/ios.md). You need a Mac with Xcode; a free Apple ID is enough for a personal install.

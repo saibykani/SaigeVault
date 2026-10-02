@@ -59,3 +59,13 @@ def test_key_rotation_reads_old_versions() -> None:
 def test_invalid_keys_rejected(bad: str) -> None:
     with pytest.raises(ValueError, match="TOKEN_ENCRYPTION_KEY"):
         decode_key(bad)
+
+
+def test_standard_base64_keys_are_accepted() -> None:
+    """Hosting platforms (e.g. Render generateValue) emit standard base64 with + and /."""
+    import base64  # noqa: PLC0415
+
+    raw = bytes([0xFB, 0xFF] * 16)  # encodes to characters '+' and '/'
+    standard = base64.b64encode(raw).decode()
+    assert "+" in standard or "/" in standard
+    assert decode_key(standard) == raw

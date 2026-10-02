@@ -85,12 +85,19 @@ export function useReadiness(options?: { refetchInterval?: number }) {
   });
 }
 
+/** Free hosting sleeps when idle and takes up to ~a minute to wake. Retry for ~90 s. */
+export const WAKE_RETRIES = 8;
+export function wakeRetryDelay(attempt: number): number {
+  return Math.min(15_000, 1_500 * 2 ** attempt);
+}
+
 export function useSystemInfo() {
   return useQuery({
     queryKey: queryKeys.systemInfo,
     queryFn: fetchSystemInfo,
     staleTime: 5 * 60_000,
-    retry: 1,
+    retry: WAKE_RETRIES,
+    retryDelay: wakeRetryDelay,
   });
 }
 

@@ -40,11 +40,6 @@ def test_production_rejects_wildcard_cors() -> None:
         )
 
 
-def test_database_url_requires_async_driver() -> None:
-    with pytest.raises(ValidationError, match="asyncpg"):
-        make_settings(database_url="postgresql://u:p@localhost/db")
-
-
 def test_secrets_are_not_rendered_in_repr() -> None:
     settings = make_settings(jwt_secret="very-secret-jwt-value")
     assert "very-secret-jwt-value" not in repr(settings)
@@ -63,3 +58,26 @@ def test_production_rejects_dev_login() -> None:
             token_encryption_key=TEST_KEY,
             dev_login_enabled=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (
+            "postgresql://u:p@ep-x.neon.tech/neondb?sslmode=require&channel_binding=require",
+            "postgresql+asyncpg://u:p@ep-x.neon.tech/neondb?ssl=require",
+        ),
+        (
+            "postgres://u:p@db.example.com:5432/app",
+            "postgresql+asyncpg://u:p@db.example.com:5432/app",
+        ),
+        ("postgresql+asyncpg://u:p@localhost/db", "postgresql+asyncpg://u:p@localhost/db"),
+    ],
+)
+def test_hosted_database_urls_are_normalized(raw: str, expected: str) -> None:
+    assert make_settings(database_url=raw).database_url == expected
+
+
+def test_non_postgres_database_url_rejected() -> None:
+    with pytest.raises(ValidationError, match="PostgreSQL"):
+        make_settings(database_url="mysql://u:p@localhost/db")

@@ -18,6 +18,34 @@ from saige_ai.policy import AIProcessingPolicy
 __all__ = ["AIProcessingPolicy", "Environment", "Settings", "get_settings"]
 
 
+def normalize_database_url(value: str) -> str:
+    """Accept URLs exactly as hosted providers (Neon, Supabase, Render) print them.
+
+    - postgres:// and postgresql:// become postgresql+asyncpg://
+    - libpq's sslmode=... becomes asyncpg's ssl=...
+    - libpq-only options asyncpg rejects (channel_binding, ...) are dropped
+    """
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit  # noqa: PLC0415
+
+    url = value.strip()
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+asyncpg://" + url[len(prefix) :]
+    if not url.startswith("postgresql+asyncpg://"):
+        raise ValueError("DATABASE_URL must be a PostgreSQL URL (postgresql://...)")
+    parts = urlsplit(url)
+    query: list[tuple[str, str]] = []
+    for key, val in parse_qsl(parts.query, keep_blank_values=True):
+        if key == "sslmode":
+            if val in {"require", "verify-ca", "verify-full", "prefer", "allow"}:
+                query.append(("ssl", val))
+        elif key in {"channel_binding", "options", "application_name", "target_session_attrs"}:
+            continue
+        else:
+            query.append((key, val))
+    return urlunsplit(parts._replace(query=urlencode(query)))
+
+
 class Environment(StrEnum):
     DEVELOPMENT = "development"
     TEST = "test"
@@ -110,9 +138,7 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _require_async_driver(cls, value: str) -> str:
-        if not value.startswith("postgresql+asyncpg://"):
-            raise ValueError("DATABASE_URL must use the postgresql+asyncpg:// driver")
-        return value
+        return normalize_database_url(value)
 
     @model_validator(mode="after")
     def _enforce_production_requirements(self) -> Settings:
