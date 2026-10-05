@@ -6,7 +6,7 @@ import { type FormEvent, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { encode } from "uqr";
 
-import { MIN_PASSWORD_LENGTH, PasswordField } from "@/components/auth/password-form";
+import { PasswordField } from "@/components/auth/password-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -112,10 +112,9 @@ function PasswordDialog({
             value={next}
             onChange={setNext}
             autoComplete="new-password"
-            minLength={MIN_PASSWORD_LENGTH}
           />
           <p className="text-xs text-muted-foreground">
-            At least {MIN_PASSWORD_LENGTH} characters. Passwords found in data breaches are refused.
+            Passwords found in known data breaches are refused.
           </p>
           <ErrorLine error={change.error} />
           <div className="flex justify-end gap-2">

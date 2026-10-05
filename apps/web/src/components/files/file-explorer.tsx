@@ -18,7 +18,6 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type DragEvent,
@@ -46,7 +45,7 @@ import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isTypingTarget } from "@/hooks/use-keyboard-shortcuts";
-import { useSession, useStorageConnections } from "@/lib/api";
+import { useSession, useStorageReady } from "@/lib/api";
 import {
   errorMessage,
   type FileQuery,
@@ -125,8 +124,7 @@ export function FileExplorer() {
   const dragDepth = useRef(0);
 
   const { data: session } = useSession();
-  const { data: connections } = useStorageConnections(Boolean(session));
-  const driveReady = connections?.some((c) => c.status === "active") ?? false;
+  const driveReady = useStorageReady();
 
   const query: FileQuery = useMemo(
     () => ({
@@ -491,18 +489,16 @@ export function FileExplorer() {
         </nav>
       )}
 
-      {session && connections && !driveReady && view !== "trash" ? (
+      {session && !driveReady && view !== "trash" ? (
         <div
           role="note"
           className="mx-4 mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 text-sm sm:mx-6"
         >
           <HardDrive className="size-4 text-warning" aria-hidden="true" />
           <span className="flex-1 text-muted-foreground">
-            Connect Google Drive to upload. Your files are stored in your own Drive.
+            Uploads are unavailable: file storage (Cloudflare R2) isn&apos;t configured on the
+            server yet.
           </span>
-          <Button size="sm" asChild>
-            <Link href="/settings#storage">Connect Drive</Link>
-          </Button>
         </div>
       ) : null}
 

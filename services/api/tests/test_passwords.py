@@ -28,17 +28,15 @@ def test_unicode_is_normalised() -> None:
 
 @pytest.mark.parametrize(
     ("candidate", "reason"),
-    [
-        ("short", "at least 12"),
-        ("x" * 129, "at most 128"),
-        ("password1234", "too easy"),
-        ("aaaaaaaaaaaaaa", "too easy"),
-        ("alice.smith-2026!", "email address"),
-    ],
+    [("", "Enter a password"), ("x" * 1025, "at most 1024"), ("password1234", "too easy")],
 )
-def test_policy_rejects_weak_passwords(candidate: str, reason: str) -> None:
+def test_policy_rejects_only_empty_huge_or_common(candidate: str, reason: str) -> None:
     with pytest.raises(passwords.WeakPasswordError, match=reason):
         passwords.check_policy(candidate, email="alice.smith@example.com")
+
+
+def test_policy_has_no_minimum_length() -> None:
+    passwords.check_policy("k9", email="alice@example.com")
 
 
 def test_policy_accepts_passphrase() -> None:

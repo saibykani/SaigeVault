@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Saige Vault API image (also used for running migrations).
+# Saige Vault API image.
 # Build context: repository root.
 
 ARG PYTHON_VERSION=3.12
@@ -37,8 +37,6 @@ RUN groupadd --system --gid 10001 saige \
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 # Migrations + Alembic config (paths mirror the repository layout).
-COPY database/migrations database/migrations
-COPY services/api/alembic.ini services/api/alembic.ini
 COPY --chmod=0755 infrastructure/docker/api-entrypoint.sh /usr/local/bin/saige-api-entrypoint
 USER saige
 EXPOSE 8000

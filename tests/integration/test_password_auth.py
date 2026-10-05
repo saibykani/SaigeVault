@@ -9,8 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from pymongo.asynchronous.database import AsyncDatabase
 
 from saige_api.auth import totp
 
@@ -38,7 +37,7 @@ def fresh(client: httpx.AsyncClient) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=client._transport, base_url=WEB)
 
 
-async def test_register_then_sign_in(make_client: Any, engine: AsyncEngine) -> None:
+async def test_register_then_sign_in(make_client: Any, db: AsyncDatabase[dict[str, Any]]) -> None:
     async for client, _fake, _drive in make_client():
         email = new_email()
         created = await register(client, email)
@@ -57,14 +56,9 @@ async def test_register_then_sign_in(make_client: Any, engine: AsyncEngine) -> N
         assert (await other.get("/api/v1/auth/session")).status_code == 200
         await other.aclose()
 
-        async with engine.connect() as conn:
-            stored = await conn.scalar(
-                text(
-                    "SELECT c.password_hash FROM password_credentials c "
-                    "JOIN users u ON u.id = c.user_id WHERE u.email = :e"
-                ),
-                {"e": email},
-            )
+        user = await db.users.find_one({"email_lower": email.lower()})
+        assert user is not None
+        stored = user["password"]["hash"]
         assert stored.startswith("$argon2id$") and PASSWORD not in stored
 
 
@@ -97,7 +91,7 @@ async def test_account_locks_after_repeated_failures(make_client: Any) -> None:
 
 async def test_weak_and_duplicate_registrations_refused(make_client: Any) -> None:
     async for client, _fake, _drive in make_client():
-        weak = await register(client, new_email(), "short")
+        weak = await register(client, new_email(), "password1234")
         assert weak.status_code == 400 and weak.json()["error"]["code"] == "weak_password"
         email = new_email()
         assert (await register(fresh(client), email)).status_code == 201

@@ -1,4 +1,9 @@
-"""Email + password accounts with an optional TOTP second factor."""
+"""Email + password accounts with an optional TOTP second factor.
+
+The credential lives on the user document as `password`:
+{hash, changed_at, totp_secret (encrypted), totp_key_version, totp_enabled_at,
+ totp_last_step, recovery_hashes}
+"""
 
 from __future__ import annotations
 
@@ -6,26 +11,29 @@ import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from pymongo.errors import DuplicateKeyError
 
 from saige_api.auth import passwords, totp
+from saige_api.auth.users import find_user_by_email, new_user
 from saige_api.core.errors import AppError, ConflictError, RateLimitedError, UnauthorizedError
 from saige_api.crypto import TokenCipher
+from saige_api.db import Doc, now
+from saige_api.enums import UserStatus
 from saige_api.kv import KeyValueStore
-from saige_api.models import PasswordCredential, User
-from saige_api.models.enums import UserStatus
 
-# Per-account brute-force protection, independent of the per-IP limit, so a
-# botnet spreading guesses across addresses still gets 5 tries per 15 minutes.
+# Per-account brute-force protection, independent of the per-IP limit.
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_SECONDS = 15 * 60
 MFA_TICKET_SECONDS = 5 * 60
 MFA_MAX_ATTEMPTS = 5
 
 INVALID_CREDENTIALS = "Email or password is incorrect."
+_CONFLICT = (
+    "An account with this email already exists. Sign in instead, or use "
+    "Continue with Google if that's how you joined."
+)
 
 
 class InvalidCredentialsError(UnauthorizedError):
@@ -52,55 +60,55 @@ def _email_key(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode()).hexdigest()
 
 
-def _totp_aad(credential_id: uuid.UUID) -> str:
-    return f"password_credential:{credential_id}:totp"
+def _totp_aad(user_id: uuid.UUID) -> str:
+    return f"user:{user_id}:totp"
+
+
+def new_credential(password: str) -> dict[str, Any]:
+    return {
+        "hash": passwords.hash_password(password),
+        "changed_at": now(),
+        "totp_secret": None,
+        "totp_key_version": None,
+        "totp_enabled_at": None,
+        "totp_last_step": None,
+        "recovery_hashes": [],
+    }
 
 
 @dataclass(frozen=True, slots=True)
 class LoginResult:
-    user: User
+    user: Doc
     mfa_ticket: str | None = None
 
 
 class PasswordAccountService:
-    def __init__(self, db: AsyncSession, kv: KeyValueStore, cipher: TokenCipher | None) -> None:
+    def __init__(self, db: Any, kv: KeyValueStore, cipher: TokenCipher | None) -> None:
         self._db = db
         self._kv = kv
         self._cipher = cipher
 
-    # -- lookups ------------------------------------------------------------
+    async def _user(self, user_id: uuid.UUID) -> Doc | None:
+        raw = await self._db.users.find_one({"_id": user_id})
+        return Doc(raw) if raw else None
 
-    async def credential_for(
-        self, user_id: uuid.UUID, *, for_update: bool = False
-    ) -> PasswordCredential | None:
-        query = select(PasswordCredential).where(PasswordCredential.user_id == user_id)
-        if for_update:
-            query = query.with_for_update()
-        return await self._db.scalar(query)
-
-    async def _user_by_email(self, email: str) -> User | None:
-        return await self._db.scalar(
-            select(User).where(func.lower(User.email) == email.strip().lower())
-        )
+    async def credential_for(self, user_id: uuid.UUID) -> dict[str, Any] | None:
+        user = await self._user(user_id)
+        return user.password if user else None
 
     # -- registration ---------------------------------------------------------
 
-    async def register(self, email: str, password: str, display_name: str | None) -> User:
-        email = email.strip()
-        if await self._user_by_email(email) is not None:
-            raise ConflictError(
-                "An account with this email already exists. Sign in instead, or use "
-                "Continue with Google if that's how you joined."
-            )
-        user = User(email=email, display_name=display_name, status=UserStatus.ACTIVE)
-        self._db.add(user)
-        await self._db.flush()
-        self._db.add(
-            PasswordCredential(user_id=user.id, password_hash=passwords.hash_password(password))
-        )
-        user.last_login_at = datetime.now(UTC)
-        await self._db.flush()
-        return user
+    async def register(self, email: str, password: str, display_name: str | None) -> Doc:
+        if await find_user_by_email(self._db, email) is not None:
+            raise ConflictError(_CONFLICT)
+        user = new_user(email, display_name)
+        user["password"] = new_credential(password)
+        user["last_login_at"] = now()
+        try:
+            await self._db.users.insert_one(user)
+        except DuplicateKeyError as exc:
+            raise ConflictError(_CONFLICT) from exc
+        return Doc(user)
 
     # -- sign-in --------------------------------------------------------------
 
@@ -115,22 +123,25 @@ class PasswordAccountService:
 
     async def authenticate(self, email: str, password: str) -> LoginResult:
         fail_key = await self._check_lockout(email)
-        user = await self._user_by_email(email)
-        credential = await self.credential_for(user.id) if user is not None else None
+        user = await find_user_by_email(self._db, email)
+        credential = user.password if user else None
         # Always run one Argon2 verification so timing doesn't reveal accounts.
-        ok = passwords.verify_password(credential.password_hash if credential else None, password)
+        ok = passwords.verify_password(credential["hash"] if credential else None, password)
         if not ok or user is None or credential is None:
             await self._kv.incr(fail_key, ttl_seconds=LOCKOUT_SECONDS)
             raise InvalidCredentialsError(INVALID_CREDENTIALS)
-        if user.deleted_at is not None or user.status is not UserStatus.ACTIVE:
+        if user.deleted_at is not None or user.status != UserStatus.ACTIVE.value:
             raise InvalidCredentialsError(INVALID_CREDENTIALS)
         await self._kv.pop(fail_key)
-        if passwords.needs_rehash(credential.password_hash):
-            credential.password_hash = passwords.hash_password(password)
-        if credential.totp_enabled_at is not None:
+        updates: dict[str, Any] = {}
+        if passwords.needs_rehash(credential["hash"]):
+            updates["password.hash"] = passwords.hash_password(password)
+        if credential.get("totp_enabled_at") is not None:
+            if updates:
+                await self._db.users.update_one({"_id": user.id}, {"$set": updates})
             return LoginResult(user=user, mfa_ticket=await self._issue_mfa_ticket(user.id))
-        user.last_login_at = datetime.now(UTC)
-        await self._db.flush()
+        updates["last_login_at"] = now()
+        await self._db.users.update_one({"_id": user.id}, {"$set": updates})
         return LoginResult(user=user)
 
     async def _issue_mfa_ticket(self, user_id: uuid.UUID) -> str:
@@ -142,7 +153,7 @@ class PasswordAccountService:
         )
         return ticket
 
-    async def complete_mfa(self, ticket: str, code: str) -> User:
+    async def complete_mfa(self, ticket: str, code: str) -> Doc:
         digest = hashlib.sha256(ticket.encode()).hexdigest()
         ticket_key = f"saige:mfa:{digest}"
         raw_user = await self._kv.get(ticket_key)
@@ -154,15 +165,12 @@ class PasswordAccountService:
         if attempts > MFA_MAX_ATTEMPTS:
             await self._kv.pop(ticket_key)
             raise RateLimitedError("Too many incorrect codes. Please sign in again.")
-        user_id = uuid.UUID(raw_user)
-        credential = await self.credential_for(user_id, for_update=True)
-        user = await self._db.get(User, user_id)
-        if credential is None or user is None or not self._accept_second_factor(credential, code):
+        user = await self._user(uuid.UUID(raw_user))
+        if user is None or not await self._accept_second_factor(user, code):
             raise InvalidCodeError("That code isn't valid. Check your authenticator app.")
         if await self._kv.pop(ticket_key) is None:  # concurrent use of one ticket
             raise UnauthorizedError("That sign-in expired. Please enter your password again.")
-        user.last_login_at = datetime.now(UTC)
-        await self._db.flush()
+        await self._db.users.update_one({"_id": user.id}, {"$set": {"last_login_at": now()}})
         return user
 
     # -- second factor --------------------------------------------------------
@@ -174,100 +182,129 @@ class PasswordAccountService:
             )
         return self._cipher
 
-    def _secret(self, credential: PasswordCredential) -> str | None:
-        if credential.encrypted_totp_secret is None:
+    def _secret(self, user: Doc) -> str | None:
+        blob = (user.password or {}).get("totp_secret")
+        if blob is None:
             return None
-        return self._require_cipher().decrypt(
-            credential.encrypted_totp_secret, associated_data=_totp_aad(credential.id)
-        )
+        return self._require_cipher().decrypt(bytes(blob), associated_data=_totp_aad(user.id))
 
-    def _accept_second_factor(self, credential: PasswordCredential, code: str) -> bool:
-        """TOTP code (replay-protected) or a single-use recovery code."""
-        secret = self._secret(credential)
-        if secret is None or credential.totp_enabled_at is None:
+    async def _accept_second_factor(self, user: Doc, code: str) -> bool:
+        """TOTP code (replay-protected) or a single-use recovery code. Atomic."""
+        credential = user.password or {}
+        secret = self._secret(user)
+        if secret is None or credential.get("totp_enabled_at") is None:
             return False
-        step = totp.verify(secret, code, last_used_step=credential.totp_last_used_step)
+        step = totp.verify(secret, code, last_used_step=credential.get("totp_last_step"))
         if step >= 0:
-            credential.totp_last_used_step = step
-            return True
+            # Only advance if no other request used this or a later step meanwhile.
+            result = await self._db.users.update_one(
+                {
+                    "_id": user.id,
+                    "$or": [
+                        {"password.totp_last_step": None},
+                        {"password.totp_last_step": {"$lt": step}},
+                    ],
+                },
+                {"$set": {"password.totp_last_step": step}},
+            )
+            return bool(result.modified_count)
         hashed = totp.hash_recovery_code(code)
-        if hashed in credential.recovery_code_hashes:
-            credential.recovery_code_hashes = [
-                h for h in credential.recovery_code_hashes if h != hashed
-            ]
-            return True
-        return False
+        result = await self._db.users.update_one(
+            {"_id": user.id, "password.recovery_hashes": hashed},
+            {"$pull": {"password.recovery_hashes": hashed}},
+        )
+        return bool(result.modified_count)
 
-    async def verify_password_for(self, user_id: uuid.UUID, password: str) -> PasswordCredential:
+    async def verify_password_for(self, user_id: uuid.UUID, password: str) -> Doc:
         """Step-up check for sensitive changes; shares the per-account lockout."""
-        user = await self._db.get(User, user_id)
-        email = user.email if user else str(user_id)
-        fail_key = await self._check_lockout(email)
-        credential = await self.credential_for(user_id, for_update=True)
-        if not passwords.verify_password(
-            credential.password_hash if credential else None, password
-        ):
+        user = await self._user(user_id)
+        fail_key = await self._check_lockout(user.email if user else str(user_id))
+        credential = user.password if user else None
+        if not passwords.verify_password(credential["hash"] if credential else None, password):
             await self._kv.incr(fail_key, ttl_seconds=LOCKOUT_SECONDS)
             raise IncorrectPasswordError("Your current password is incorrect.")
-        assert credential is not None  # noqa: S101 - verify_password(None, ...) is False
-        return credential
+        assert user is not None  # noqa: S101
+        return user
 
-    async def begin_totp_setup(
-        self, credential: PasswordCredential, account: str
-    ) -> tuple[str, str]:
-        if credential.totp_enabled_at is not None:
+    async def begin_totp_setup(self, user: Doc) -> tuple[str, str]:
+        if (user.password or {}).get("totp_enabled_at") is not None:
             raise ConflictError("Two-step verification is already on.")
         cipher = self._require_cipher()
         secret = totp.new_secret()
-        credential.encrypted_totp_secret = cipher.encrypt(
-            secret, associated_data=_totp_aad(credential.id)
+        await self._db.users.update_one(
+            {"_id": user.id},
+            {
+                "$set": {
+                    "password.totp_secret": cipher.encrypt(
+                        secret, associated_data=_totp_aad(user.id)
+                    ),
+                    "password.totp_key_version": cipher.current_version,
+                    "password.totp_last_step": None,
+                }
+            },
         )
-        credential.totp_key_version = cipher.current_version
-        credential.totp_last_used_step = None
-        await self._db.flush()
-        return secret, totp.provisioning_uri(secret, account=account)
+        return secret, totp.provisioning_uri(secret, account=user.email)
 
     async def enable_totp(self, user_id: uuid.UUID, code: str) -> list[str]:
-        credential = await self.credential_for(user_id, for_update=True)
-        if credential is None or credential.encrypted_totp_secret is None:
+        user = await self._user(user_id)
+        credential = (user.password if user else None) or {}
+        if user is None or credential.get("totp_secret") is None:
             raise ConflictError("Start two-step verification setup first.")
-        if credential.totp_enabled_at is not None:
+        if credential.get("totp_enabled_at") is not None:
             raise ConflictError("Two-step verification is already on.")
-        secret = self._secret(credential)
+        secret = self._secret(user)
         assert secret is not None  # noqa: S101
         step = totp.verify(secret, code, last_used_step=None)
         if step < 0:
             raise InvalidCodeError("That code isn't valid. Check your authenticator app.")
         codes = totp.new_recovery_codes()
-        credential.totp_last_used_step = step
-        credential.totp_enabled_at = datetime.now(UTC)
-        credential.recovery_code_hashes = [totp.hash_recovery_code(c) for c in codes]
-        await self._db.flush()
+        await self._db.users.update_one(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "password.totp_last_step": step,
+                    "password.totp_enabled_at": now(),
+                    "password.recovery_hashes": [totp.hash_recovery_code(c) for c in codes],
+                }
+            },
+        )
         return codes
 
-    async def disable_totp(self, credential: PasswordCredential, code: str) -> None:
-        if credential.totp_enabled_at is None:
+    async def disable_totp(self, user: Doc, code: str) -> None:
+        if (user.password or {}).get("totp_enabled_at") is None:
             raise ConflictError("Two-step verification is already off.")
-        if not self._accept_second_factor(credential, code):
+        if not await self._accept_second_factor(user, code):
             raise InvalidCodeError("That code isn't valid. Check your authenticator app.")
-        credential.encrypted_totp_secret = None
-        credential.totp_key_version = None
-        credential.totp_enabled_at = None
-        credential.totp_last_used_step = None
-        credential.recovery_code_hashes = []
-        await self._db.flush()
+        await self._db.users.update_one(
+            {"_id": user.id},
+            {
+                "$set": {
+                    "password.totp_secret": None,
+                    "password.totp_key_version": None,
+                    "password.totp_enabled_at": None,
+                    "password.totp_last_step": None,
+                    "password.recovery_hashes": [],
+                }
+            },
+        )
 
     # -- password changes -----------------------------------------------------
 
     async def set_password(self, user_id: uuid.UUID, new_password: str) -> None:
-        credential = await self.credential_for(user_id, for_update=True)
-        if credential is None:
-            self._db.add(
-                PasswordCredential(
-                    user_id=user_id, password_hash=passwords.hash_password(new_password)
-                )
+        user = await self._user(user_id)
+        if user is None:
+            return
+        if user.password:
+            await self._db.users.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {
+                        "password.hash": passwords.hash_password(new_password),
+                        "password.changed_at": now(),
+                    }
+                },
             )
         else:
-            credential.password_hash = passwords.hash_password(new_password)
-            credential.password_changed_at = datetime.now(UTC)
-        await self._db.flush()
+            await self._db.users.update_one(
+                {"_id": user_id}, {"$set": {"password": new_credential(new_password)}}
+            )

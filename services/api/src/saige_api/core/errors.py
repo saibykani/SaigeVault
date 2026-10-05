@@ -97,21 +97,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _storage_error(request: Request, exc: StorageError) -> JSONResponse:
         status_code = {
             "storage_not_found": status.HTTP_404_NOT_FOUND,
-            "storage_reauth_required": status.HTTP_409_CONFLICT,
-            "storage_quota_exceeded": status.HTTP_507_INSUFFICIENT_STORAGE,
-            "storage_permission_denied": status.HTTP_403_FORBIDDEN,
-            "storage_api_disabled": status.HTTP_503_SERVICE_UNAVAILABLE,
+            "storage_not_configured": status.HTTP_503_SERVICE_UNAVAILABLE,
             "storage_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
         }.get(exc.code, status.HTTP_502_BAD_GATEWAY)
         messages = {
-            "storage_not_found": "The file was not found in your storage.",
-            "storage_reauth_required": "Reconnect your Google Drive to continue.",
-            "storage_quota_exceeded": "Your Google Drive storage is full.",
-            "storage_permission_denied": "Saige doesn't have permission for that file.",
-            "storage_api_disabled": (
-                "The Google Drive API isn't enabled for this app's Google Cloud project."
-            ),
-            "storage_unavailable": "Google Drive is temporarily unavailable. Try again shortly.",
+            "storage_not_found": "The file was not found in storage.",
+            "storage_not_configured": "File storage isn't configured on this server.",
+            "storage_unavailable": "File storage is temporarily unavailable. Try again shortly.",
         }
         return error_response(
             request, status_code, exc.code, messages.get(exc.code, "Storage request failed")

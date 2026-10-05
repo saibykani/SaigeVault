@@ -81,36 +81,11 @@ const consoleErrors = [];
 page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
 page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
-// Fake Google consent. Playwright can't intercept a redirected navigation, so
-// intercept our connect endpoint, read its redirect to Google, and bounce
-// straight back to the callback with the nonce as the (auto-approved) code.
-await page.route("**/api/v1/storage/google-drive/connect**", async (route) => {
-  const response = await route.fetch({ maxRedirects: 0 });
-  const google = new URL(response.headers()["location"]);
-  if (google.hostname !== "accounts.google.com") throw new Error("unexpected redirect " + google);
-  if (
-    google.searchParams.get("scope") !== "openid email https://www.googleapis.com/auth/drive.file"
-  )
-    throw new Error("wrong scope");
-  await route.fulfill({
-    status: 302,
-    headers: {
-      location: `${BASE}/api/v1/auth/google/callback?code=${google.searchParams.get("nonce")}&state=${google.searchParams.get("state")}`,
-    },
-  });
-});
-
 await page.goto(`${BASE}/login`);
-await page.getByPlaceholder("you@example.com").fill(`e2e-${Date.now()}@example.com`);
+await page.locator("#dev-email").fill(`e2e-${Date.now()}@example.com`);
 await page.getByRole("button", { name: "Sign in", exact: true }).click();
 await page.waitForURL(`${BASE}/`);
 log("signed in");
-
-await page.goto(`${BASE}/settings#storage`);
-await page.getByRole("link", { name: "Connect" }).click();
-await page.getByText("Google Drive connected").waitFor();
-await page.getByText("Google account storage").waitFor();
-log("Google Drive connected (fake consent), quota shown");
 
 await page.goto(`${BASE}/files`);
 await page.getByText("Your vault is empty").waitFor();

@@ -1,89 +1,69 @@
-# Free hosting (Vercel + Render + Neon + Upstash)
-
-This puts Saige Vault online for free, so `https://saigevault.vercel.app` and your phone can sign in. It takes about 20 minutes, done once.
+# Free hosting (Vercel + Render + MongoDB Atlas + Cloudflare R2)
 
 | Piece | Service (free tier) | Holds |
 | --- | --- | --- |
 | Web app | Vercel | Pages; proxies `/api/*` to the API |
-| API | Render (Docker) | Saige backend; runs migrations on deploy |
-| Database | Neon (PostgreSQL) | Metadata, sessions, audit |
-| Redis (optional) | Upstash | Rate limits, sign-in state. Without it these are kept in-process, which is fine for one free instance |
-| Files | Your Google Drive | Original documents |
+| API | Render (Docker) | Saige backend |
+| Database | MongoDB Atlas (M0) | Users, sessions, file details (name, type, size, R2 key, dates), folders, tags, collections, audit log |
+| Files | Cloudflare R2 (10 GB free) | File content, under `documents/`, `images/`, `certificates/`, `resumes/` and `other/` |
+| Redis (optional) | Upstash | Rate limits and sign-in state. Without it these are kept in-process, which is fine for one instance |
 
-> **Why PostgreSQL, not MongoDB?** Saige's schema, migrations and tenant isolation (ADR-0005) are built on PostgreSQL features: composite foreign keys, CHECK constraints and transactions. MongoDB isn't a drop-in replacement.
+## 1. MongoDB Atlas
 
-## 1. Database — Neon
+1. In **Database → Connect → Drivers**, copy the `mongodb+srv://…` string.
+2. Add the database name after `.net/`, for example `…mongodb.net/saige_vault?appName=…`.
+3. If your password contains `@`, `:`, `/`, `?` or `#`, write it percent-encoded. For example, `@` becomes `%40`.
+4. In **Network Access**, add `0.0.0.0/0`. Render's free tier has no fixed IP address.
 
-1. Sign up at [neon.tech](https://neon.tech) and create a project (pick a region near you).
-2. On the dashboard, click **Connect** and copy the connection string (`postgresql://…neon.tech/neondb?sslmode=require…`).
+Saige creates its indexes automatically when it starts.
 
-Paste it as-is later. Saige converts it for its driver automatically.
+## 2. Cloudflare R2
 
-## 2. Redis — Upstash (optional, skip if you like)
+1. In the Cloudflare dashboard, open **R2 Object Storage** and create a bucket named `saige-vault`. Keep it private, with no public access.
+2. Click **Manage API tokens → Create API token**. Choose **Object Read & Write**, limited to that bucket.
+3. Note these three values:
+   - the **Access Key ID**;
+   - the **Secret Access Key**;
+   - your **Account ID**, shown on the R2 overview page.
 
-Skip this step to start. Without `REDIS_URL`, the API keeps sign-in state and rate limits in memory, which is correct for a single instance. Add Redis later if you run more than one API instance.
+R2 requires a payment method on file even for the free tier. 10 GB of storage and downloads (egress) are free.
 
+## 3. Render (API)
 
-1. Sign up at [upstash.com](https://upstash.com) and create a **Redis** database.
-2. Copy the **`rediss://default:…@….upstash.io:6379`** URL. Note the double `s`, which means TLS.
+Create a **New → Web Service** from this repository:
 
-## 3. Google Cloud (OAuth client)
+- **Runtime:** Docker
+- **Dockerfile path:** `./infrastructure/docker/backend.Dockerfile`
+- **Health check path:** `/health`
 
-In your OAuth client (APIs & Services → Credentials), add **both** Authorized redirect URIs:
+Then set these environment variables:
 
-```text
-https://saigevault.vercel.app/api/v1/auth/google/callback
-http://localhost:3001/api/v1/auth/google/callback
-```
+| Key | Value |
+| --- | --- |
+| `APP_ENV` | `production` |
+| `MONGODB_URI` | the Atlas string from step 1 |
+| `R2_ACCOUNT_ID` | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | from the R2 API token |
+| `R2_SECRET_ACCESS_KEY` | from the R2 API token |
+| `R2_BUCKET` | `saige-vault` |
+| `JWT_SECRET` | 48+ random characters |
+| `TOKEN_ENCRYPTION_KEY` | `python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth client (sign-in only) |
+| `GOOGLE_REDIRECT_URI` | `https://saigevault.vercel.app/api/v1/auth/google/callback` |
+| `WEB_PUBLIC_URL` / `CORS_ALLOWED_ORIGINS` | `https://saigevault.vercel.app` |
 
-Also:
-- **OAuth consent screen → Test users:** add your Google address.
-- **APIs & Services → Library:** enable **Google Drive API**.
-- **Data access / Scopes:** add `…/auth/drive.file`.
+Remove `DATABASE_URL`; it's no longer used.
 
-## 4. API — Render (plain Web Service, no Blueprint needed)
+Check that `https://<render-url>/ready` lists `database` and `storage` as `ok`.
 
-1. Go to [dashboard.render.com](https://dashboard.render.com), click **New → Web Service**, and connect GitHub. Select `saibykani/SaigeVault`.
-2. Fill in the service settings:
-   - **Language/Runtime:** Docker
-   - **Branch:** `main`
-   - **Region:** Singapore
-   - **Dockerfile Path:** `./infrastructure/docker/backend.Dockerfile`
-   - **Docker Build Context:** `.`
-   - **Instance type:** Free
-   - Leave **Start/Docker Command** empty. The image runs migrations and binds to `$PORT` on its own.
-3. Under **Advanced → Health Check Path**, enter `/health`.
-4. Under **Environment Variables**, add:
+## 4. Vercel (web)
 
-   | Key | Value |
-   | --- | --- |
-   | `APP_ENV` | `production` |
-   | `DATABASE_URL` | Neon **direct** URL (host without `-pooler`) |
-   | `GOOGLE_CLIENT_ID` | your OAuth client ID |
-   | `GOOGLE_CLIENT_SECRET` | your OAuth client secret |
-   | `JWT_SECRET` | click **Generate** (or any random string of 48+ characters) |
-   | `TOKEN_ENCRYPTION_KEY` | 32 random bytes, base64. Click **Generate**, or run `python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"` |
-   | `WEB_PUBLIC_URL` | `https://saigevault.vercel.app` |
-   | `GOOGLE_REDIRECT_URI` | `https://saigevault.vercel.app/api/v1/auth/google/callback` |
-   | `CORS_ALLOWED_ORIGINS` | `https://saigevault.vercel.app` |
-
-5. Click **Deploy Web Service**. The logs should show `Running upgrade` lines, then `Application startup complete`. Copy the URL (e.g. `https://saige-vault-api.onrender.com`) and check that `/health` returns `{"status":"ok"…}`.
-
-Prefer automation? **New → Blueprint** with this repository does the same thing from [`render.yaml`](../../render.yaml).
-
-## 5. Web — Vercel
-
-1. Go to **Project → Settings → Build and Deployment** and set **Root Directory** to `apps/web`. The Framework should then show Next.js.
-2. Under **Settings → Environment Variables**, add `API_PROXY_TARGET` = your Render URL (no trailing slash), for all environments.
-3. Go to **Deployments → ⋯ → Redeploy**. Proxy rewrites are fixed at build time, so a redeploy is required.
-
-Open `https://saigevault.vercel.app` and click **Continue with Google**.
+1. Set **Root Directory** to `apps/web`.
+2. Set `API_PROXY_TARGET` to your Render URL.
+3. Redeploy.
 
 ## Good to know
 
-- **Cold starts:** Render's free tier sleeps after 15 minutes idle. The first visit after that takes about 30–60 seconds, and the login page shows "Waking up the server…" meanwhile. To avoid it, a free monitor (e.g. UptimeRobot) can ping `<render-url>/health` every 10 minutes. One always-on service fits within Render's free monthly hours.
-- **AI and the background worker** aren't deployed yet, so `/ready` reports `degraded`. That's expected until document processing (Phase 7).
-- **Costs:** everything above is free tier. Nothing here creates paid resources. Check each provider's current limits, which change over time.
-- **Staying connected to Drive:** the connection is stored encrypted and lasts until you disconnect it. While the Google app is in **Testing**, Google itself expires that access after 7 days. Publish the app (**Google Auth Platform → Audience → Publish app**) to stop this. `drive.file` is a non-sensitive scope, so publishing needs no Google review.
-- **Password sign-in** works out of the box. Two-step verification needs `TOKEN_ENCRYPTION_KEY`, which you already set.
-- **Secrets:** they live only in the Render and Vercel dashboards and your local `.env`, never in git. If a secret is ever shared, rotate it: reset the Google client secret, or reset the Neon/Upstash password and update Render.
+- **Cold starts:** Render's free tier sleeps after 15 minutes idle. The first visit after that takes about 30–60 seconds.
+- **Secrets** live only in the Render and Vercel dashboards and your local `.env`, never in git. If one is shared, rotate it.
+- **Google sign-in** only asks for your name and email. Saige no longer uses Google Drive.

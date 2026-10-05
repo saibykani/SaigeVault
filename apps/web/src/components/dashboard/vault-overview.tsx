@@ -10,7 +10,7 @@ import { openFilePicker } from "@/components/files/upload-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSession, useStorageConnections } from "@/lib/api";
+import { useSession, useStorageReady } from "@/lib/api";
 import { useFiles, useFileStats } from "@/lib/files-api";
 
 export function VaultMetrics() {
@@ -47,8 +47,7 @@ export function VaultMetrics() {
 
 export function RecentFiles() {
   const { data: session } = useSession();
-  const { data: connections } = useStorageConnections(Boolean(session));
-  const driveReady = connections?.some((c) => c.status === "active") ?? false;
+  const driveReady = useStorageReady();
   const { data, isLoading } = useFiles(
     { all_folders: true, sort: "updated", order: "desc", limit: 6 },
     Boolean(session),

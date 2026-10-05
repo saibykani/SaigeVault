@@ -15,6 +15,7 @@ from saige_api.core.config import Settings, get_settings
 from saige_api.core.errors import register_exception_handlers
 from saige_api.core.logging import configure_logging, get_logger
 from saige_api.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
+from saige_api.db import ensure_indexes
 from saige_api.resources import Resources
 from saige_api.schemas.system import ErrorResponse
 
@@ -35,6 +36,10 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         resources = resource_factory(settings)
         app.state.resources = resources
+        try:
+            await ensure_indexes(resources.db)
+        except Exception as exc:
+            logger.error("ensure_indexes_failed", error=type(exc).__name__)
         logger.info("startup", version=__version__, environment=settings.app_env.value)
         try:
             yield

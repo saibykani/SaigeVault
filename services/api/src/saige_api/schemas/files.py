@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from saige_api.models.enums import DataSource, DocumentType, ProcessingStatus
+from saige_api.enums import DataSource, DocumentType, ProcessingStatus
 
 SortKey = Literal["name", "updated", "created", "size", "type"]
 TypeGroup = Literal["pdf", "image", "document", "spreadsheet", "presentation", "text", "archive"]
@@ -37,6 +37,10 @@ class FileSummary(BaseModel):
     deleted_at: datetime | None
     last_accessed_at: datetime | None
     tags: list[TagRef] = []
+    category: str | None = Field(
+        default=None,
+        description="Storage folder: documents, images, certificates, resumes or other",
+    )
 
 
 class FolderSummary(BaseModel):

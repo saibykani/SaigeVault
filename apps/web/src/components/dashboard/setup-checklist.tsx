@@ -6,7 +6,7 @@ import type * as React from "react";
 
 import { PhaseBadge } from "@/components/common/feature-notice";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSession, useStorageConnections, useSystemInfo } from "@/lib/api";
+import { useSession, useSystemInfo } from "@/lib/api";
 import type { FeatureKey } from "@/lib/features";
 import { cn } from "@/lib/utils";
 
@@ -36,8 +36,6 @@ function StepIcon({ state }: { state: StepState }) {
 export function SetupChecklist() {
   const { data: info, isError } = useSystemInfo();
   const { data: session } = useSession();
-  const { data: connections } = useStorageConnections(Boolean(session));
-  const drive = connections?.find((c) => c.status !== "disconnected");
 
   const steps: Step[] = [
     {
@@ -48,30 +46,25 @@ export function SetupChecklist() {
           ? `Saige API v${info.version} (${info.environment}).`
           : "Checking…",
       state: info ? "done" : "todo",
-      href: "/system",
     },
     {
-      title: "Google OAuth configured",
-      detail: info?.google_oauth_configured
-        ? "Client credentials are set on the server."
-        : "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET on the server.",
-      state: info?.google_oauth_configured ? "done" : "todo",
+      title: "File storage ready",
+      detail: info?.storage_available
+        ? "Uploads go to Cloudflare R2."
+        : "Set the R2_* settings on the server to enable uploads.",
+      state: info?.storage_available ? "done" : "todo",
     },
     {
       title: "Signed in",
-      detail: session ? `As ${session.user.email}` : "Sign in with your Google account.",
+      detail: session ? `As ${session.user.email}` : "Sign in with Google or email.",
       state: session ? "done" : "todo",
       href: session ? "/settings#security" : "/login",
     },
     {
-      title: "Connect Google Drive",
-      detail: drive
-        ? drive.status === "needs_reauth"
-          ? "Reconnect needed — Google no longer accepts Saige's access."
-          : `Connected as ${drive.account_email ?? "your Google account"}.`
-        : "Your files stay in your Drive; Saige stores references and metadata.",
-      state: drive?.status === "active" ? "done" : "todo",
-      href: "/settings#storage",
+      title: "Upload your first file",
+      detail: "PDFs, Office documents, images, text and ZIP archives.",
+      state: "todo",
+      href: "/files",
     },
     {
       title: "Review AI & privacy policy",

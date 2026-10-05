@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from saige_api.auth.google import JWKS_URI, REVOKE_ENDPOINT, TOKEN_ENDPOINT
 
-CLIENT_ID = "test-client.apps.googleusercontent.com"
+CLIENT_ID = "123456789012-test-client.apps.googleusercontent.com"
 KID = "test-key-1"
 
 

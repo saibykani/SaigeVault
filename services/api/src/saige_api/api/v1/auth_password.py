@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request, Response, status
 
-from saige_api.api.deps import ResourcesDep, SessionDep
+from saige_api.api.deps import DbDep, ResourcesDep
 from saige_api.api.v1.auth import ERROR_RESPONSES, _client, _rate_limit, _start_session_response
 from saige_api.audit import client_ip, record_audit, record_security_event
 from saige_api.auth import passwords
@@ -20,10 +20,10 @@ from saige_api.auth.password_accounts import (
     PasswordAccountService,
 )
 from saige_api.auth.sessions import RevokeReason, SessionService
-from saige_api.core.errors import AppError, ForbiddenError, NotFoundError
+from saige_api.core.errors import ForbiddenError, NotFoundError
 from saige_api.core.logging import get_logger
-from saige_api.models import User
-from saige_api.models.enums import AuditAction, SecuritySeverity
+from saige_api.db import Doc
+from saige_api.enums import AuditAction, SecuritySeverity
 from saige_api.resources import Resources
 from saige_api.schemas.auth import (
     ChangePasswordRequest,
@@ -38,7 +38,7 @@ from saige_api.schemas.auth import (
     TotpCodeRequest,
     TotpDisableRequest,
     TotpSetupResponse,
-    UserProfile,
+    user_profile,
 )
 from saige_api.schemas.system import ErrorResponse
 
@@ -84,7 +84,7 @@ async def _check_new_password(resources: Resources, password: str, *, email: str
         )
 
 
-def _service(resources: Resources, db: SessionDep) -> PasswordAccountService:
+def _service(resources: Resources, db: DbDep) -> PasswordAccountService:
     return PasswordAccountService(db, resources.kv, resources.cipher)
 
 
@@ -92,20 +92,19 @@ async def _signed_in(
     request: Request,
     response: Response,
     resources: Resources,
-    db: SessionDep,
-    user: User,
+    db: DbDep,
+    user: Doc,
     method: str,
 ) -> SessionResponse:
     issued = await SessionService(db, resources.refresh_ttl).create(user.id, _client(request))
-    record_audit(
+    await record_audit(
         db,
         request,
         AuditAction.LOGIN,
         user_id=user.id,
         details={"method": method, "session_id": str(issued.session_id)},
     )
-    profile = UserProfile.model_validate(user, from_attributes=True)
-    await db.commit()
+    profile = user_profile(user)
     expires = _start_session_response(response, resources, issued)
     return SessionResponse(user=profile, session_id=issued.session_id, access_expires_at=expires)
 
@@ -122,7 +121,7 @@ async def register(
     request: Request,
     response: Response,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> SessionResponse:
     _require_enabled_and_same_origin(request, resources)
     await _rate_limit(resources, request, "register")
@@ -149,21 +148,19 @@ async def password_login(
     request: Request,
     response: Response,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> PasswordLoginResponse:
     _require_enabled_and_same_origin(request, resources)
     await _rate_limit(resources, request, "password_login")
     try:
         result = await _service(resources, db).authenticate(str(body.email), body.password)
     except InvalidCredentialsError:
-        record_audit(
+        await record_audit(
             db, request, AuditAction.LOGIN, user_id=None, outcome="failure",
             details={"method": "password", "reason": "invalid_credentials"},
         )  # fmt: skip
-        await db.commit()
         raise
     if result.mfa_ticket is not None:
-        await db.commit()  # persists an Argon2 rehash, if any
         return PasswordLoginResponse(mfa_required=True, mfa_token=result.mfa_ticket)
     session = await _signed_in(request, response, resources, db, result.user, "password")
     return PasswordLoginResponse(session=session)
@@ -180,15 +177,11 @@ async def password_login_mfa(
     request: Request,
     response: Response,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> PasswordLoginResponse:
     _require_enabled_and_same_origin(request, resources)
     await _rate_limit(resources, request, "password_login_mfa")
-    try:
-        user = await _service(resources, db).complete_mfa(body.mfa_token, body.code)
-    except AppError:
-        await db.rollback()
-        raise
+    user = await _service(resources, db).complete_mfa(body.mfa_token, body.code)
     session = await _signed_in(request, response, resources, db, user, "password_totp")
     return PasswordLoginResponse(session=session)
 
@@ -203,16 +196,16 @@ async def password_login_mfa(
     responses=ERROR_RESPONSES,
 )
 async def security_overview(
-    auth: CurrentUserDep, resources: ResourcesDep, db: SessionDep
+    auth: CurrentUserDep, resources: ResourcesDep, db: DbDep
 ) -> SecurityOverview:
     credential = await _service(resources, db).credential_for(auth.user_id)
-    enabled = credential is not None and credential.totp_enabled_at is not None
+    enabled = bool(credential and credential.get("totp_enabled_at"))
     return SecurityOverview(
         has_password=credential is not None,
         email_verified=auth.user.email_verified_at is not None,
-        password_changed_at=credential.password_changed_at if credential else None,
+        password_changed_at=credential.get("changed_at") if credential else None,
         totp_enabled=enabled,
-        recovery_codes_remaining=len(credential.recovery_code_hashes)
+        recovery_codes_remaining=len(credential.get("recovery_hashes") or [])
         if credential and enabled
         else 0,
     )
@@ -229,7 +222,7 @@ async def change_password(
     request: Request,
     auth: CurrentUserDep,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> Response:
     if not resources.settings.password_login_enabled:
         raise NotFoundError("Not Found")
@@ -245,12 +238,11 @@ async def change_password(
     ended = await SessionService(db, resources.refresh_ttl).revoke_all(
         auth.user_id, RevokeReason.PASSWORD_CHANGED, except_family=auth.session_id
     )
-    record_security_event(
+    await record_security_event(
         db, request, "password_changed" if existing else "password_added", SecuritySeverity.INFO,
         "Account password was set.", user_id=auth.user_id,
         details={"other_sessions_ended": ended},
     )  # fmt: skip
-    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -265,13 +257,12 @@ async def totp_setup(
     request: Request,
     auth: CurrentUserDep,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> TotpSetupResponse:
     await _rate_limit(resources, request, "totp")
     service = _service(resources, db)
-    credential = await service.verify_password_for(auth.user_id, body.password)
-    secret, uri = await service.begin_totp_setup(credential, auth.user.email)
-    await db.commit()
+    user = await service.verify_password_for(auth.user_id, body.password)
+    secret, uri = await service.begin_totp_setup(user)
     return TotpSetupResponse(secret=secret, otpauth_uri=uri)
 
 
@@ -286,19 +277,18 @@ async def totp_enable(
     request: Request,
     auth: CurrentUserDep,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> RecoveryCodesResponse:
     await _rate_limit(resources, request, "totp")
     codes = await _service(resources, db).enable_totp(auth.user_id, body.code)
     ended = await SessionService(db, resources.refresh_ttl).revoke_all(
         auth.user_id, RevokeReason.ACCOUNT_SECURED, except_family=auth.session_id
     )
-    record_security_event(
+    await record_security_event(
         db, request, "totp_enabled", SecuritySeverity.INFO,
         "Two-step verification was turned on.", user_id=auth.user_id,
         details={"other_sessions_ended": ended},
     )  # fmt: skip
-    await db.commit()
     return RecoveryCodesResponse(recovery_codes=codes)
 
 
@@ -313,15 +303,14 @@ async def totp_disable(
     request: Request,
     auth: CurrentUserDep,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> Response:
     await _rate_limit(resources, request, "totp")
     service = _service(resources, db)
-    credential = await service.verify_password_for(auth.user_id, body.password)
-    await service.disable_totp(credential, body.code)
-    record_security_event(
+    user = await service.verify_password_for(auth.user_id, body.password)
+    await service.disable_totp(user, body.code)
+    await record_security_event(
         db, request, "totp_disabled", SecuritySeverity.MEDIUM,
         "Two-step verification was turned off.", user_id=auth.user_id,
     )  # fmt: skip
-    await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

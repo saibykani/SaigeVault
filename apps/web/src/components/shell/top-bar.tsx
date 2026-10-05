@@ -4,12 +4,7 @@ import { Search } from "lucide-react";
 import Link from "next/link";
 
 import { LogoMark } from "@/components/common/logo";
-import { StatusDot } from "@/components/common/status-dot";
-import { describeReadiness } from "@/components/system/readiness";
-import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useReadiness } from "@/lib/api";
 import { useUIStore } from "@/stores/ui-store";
 
 import { AccountMenu } from "./account-menu";
@@ -17,8 +12,6 @@ import { ThemeToggle, useMounted } from "./theme-toggle";
 
 export function TopBar() {
   const setOpen = useUIStore((s) => s.setCommandPaletteOpen);
-  const { data, isError } = useReadiness();
-  const status = describeReadiness(data, isError);
   const mounted = useMounted();
   const isMac = mounted && /Mac|iPhone|iPad/.test(navigator.userAgent);
 
@@ -42,16 +35,6 @@ export function TopBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" asChild>
-              <Link href="/system" aria-label={`System status: ${status.label}`}>
-                <StatusDot tone={status.tone} className="size-2.5" />
-              </Link>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{status.label}</TooltipContent>
-        </Tooltip>
         <ThemeToggle />
         <AccountMenu />
       </div>

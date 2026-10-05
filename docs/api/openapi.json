@@ -101,7 +101,7 @@
           "current_password": {
             "anyOf": [
               {
-                "maxLength": 256,
+                "maxLength": 1024,
                 "type": "string"
               },
               {
@@ -112,7 +112,7 @@
             "title": "Current Password"
           },
           "new_password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "New Password",
             "type": "string"
@@ -434,19 +434,6 @@
         "title": "DevLoginRequest",
         "type": "object"
       },
-      "DisconnectResponse": {
-        "properties": {
-          "revoked_at_provider": {
-            "title": "Revoked At Provider",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "revoked_at_provider"
-        ],
-        "title": "DisconnectResponse",
-        "type": "object"
-      },
       "DocumentType": {
         "enum": [
           "identity",
@@ -619,6 +606,18 @@
       },
       "FileSummary": {
         "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Storage folder: documents, images, certificates, resumes or other",
+            "title": "Category"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -962,7 +961,7 @@
             "type": "string"
           },
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Password",
             "type": "string"
@@ -1081,7 +1080,7 @@
           "refresh_token": {
             "anyOf": [
               {
-                "maxLength": 256,
+                "maxLength": 1024,
                 "type": "string"
               },
               {
@@ -1145,7 +1144,7 @@
             "type": "string"
           },
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Password",
             "type": "string"
@@ -1315,7 +1314,7 @@
       "StepUpRequest": {
         "properties": {
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Password",
             "type": "string"
@@ -1325,162 +1324,6 @@
           "password"
         ],
         "title": "StepUpRequest",
-        "type": "object"
-      },
-      "StorageConnectionListResponse": {
-        "properties": {
-          "connections": {
-            "items": {
-              "$ref": "#/components/schemas/StorageConnectionSummary"
-            },
-            "title": "Connections",
-            "type": "array"
-          }
-        },
-        "required": [
-          "connections"
-        ],
-        "title": "StorageConnectionListResponse",
-        "type": "object"
-      },
-      "StorageConnectionStatus": {
-        "enum": [
-          "active",
-          "needs_reauth",
-          "disconnected",
-          "error"
-        ],
-        "title": "StorageConnectionStatus",
-        "type": "string"
-      },
-      "StorageConnectionSummary": {
-        "properties": {
-          "account_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Account Email"
-          },
-          "connected_at": {
-            "format": "date-time",
-            "title": "Connected At",
-            "type": "string"
-          },
-          "disconnected_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Disconnected At"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "last_synced_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Synced At"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/StorageProviderKind"
-          },
-          "scopes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Scopes",
-            "type": "array"
-          },
-          "status": {
-            "$ref": "#/components/schemas/StorageConnectionStatus"
-          }
-        },
-        "required": [
-          "id",
-          "provider",
-          "account_email",
-          "status",
-          "scopes",
-          "connected_at",
-          "disconnected_at",
-          "last_synced_at"
-        ],
-        "title": "StorageConnectionSummary",
-        "type": "object"
-      },
-      "StorageProviderKind": {
-        "enum": [
-          "google_drive"
-        ],
-        "title": "StorageProviderKind",
-        "type": "string"
-      },
-      "StorageQuotaResponse": {
-        "properties": {
-          "limit_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Limit Bytes"
-          },
-          "usage_bytes": {
-            "title": "Usage Bytes",
-            "type": "integer"
-          },
-          "usage_in_drive_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Usage In Drive Bytes"
-          },
-          "usage_in_trash_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Usage In Trash Bytes"
-          }
-        },
-        "required": [
-          "limit_bytes",
-          "usage_bytes",
-          "usage_in_drive_bytes",
-          "usage_in_trash_bytes"
-        ],
-        "title": "StorageQuotaResponse",
         "type": "object"
       },
       "SystemInfoResponse": {
@@ -1510,11 +1353,6 @@
             "title": "Environment",
             "type": "string"
           },
-          "google_drive_available": {
-            "default": false,
-            "title": "Google Drive Available",
-            "type": "boolean"
-          },
           "google_oauth_configured": {
             "title": "Google Oauth Configured",
             "type": "boolean"
@@ -1522,6 +1360,12 @@
           "password_login_enabled": {
             "default": true,
             "title": "Password Login Enabled",
+            "type": "boolean"
+          },
+          "storage_available": {
+            "default": false,
+            "description": "Uploads are possible (Cloudflare R2 configured)",
+            "title": "Storage Available",
             "type": "boolean"
           },
           "version": {
@@ -1653,7 +1497,7 @@
             "type": "string"
           },
           "password": {
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Password",
             "type": "string"
@@ -4615,7 +4459,7 @@
             "description": "Service Unavailable"
           }
         },
-        "summary": "Upload a file (multipart/form-data: file, folder_id?)",
+        "summary": "Upload a file (multipart/form-data: file, folder_id?, category?)",
         "tags": [
           "files"
         ]
@@ -6330,371 +6174,6 @@
         "summary": "Rename or move a folder",
         "tags": [
           "files"
-        ]
-      }
-    },
-    "/api/v1/storage/connections": {
-      "get": {
-        "operationId": "list_connections_api_v1_storage_connections_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorageConnectionListResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "List your storage connections",
-        "tags": [
-          "storage"
-        ]
-      }
-    },
-    "/api/v1/storage/connections/{connection_id}/disconnect": {
-      "post": {
-        "operationId": "disconnect_api_v1_storage_connections__connection_id__disconnect_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "connection_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Connection Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DisconnectResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Disconnect a storage provider (revokes access; files stay in your storage)",
-        "tags": [
-          "storage"
-        ]
-      }
-    },
-    "/api/v1/storage/connections/{connection_id}/quota": {
-      "get": {
-        "operationId": "quota_api_v1_storage_connections__connection_id__quota_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "connection_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Connection Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StorageQuotaResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Storage usage reported by the provider",
-        "tags": [
-          "storage"
-        ]
-      }
-    },
-    "/api/v1/storage/google-drive/connect": {
-      "get": {
-        "operationId": "connect_google_drive_api_v1_storage_google_drive_connect_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "next",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 512,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Next"
-            }
-          }
-        ],
-        "responses": {
-          "302": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Internal error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Start connecting Google Drive (302 to Google consent)",
-        "tags": [
-          "storage"
         ]
       }
     },

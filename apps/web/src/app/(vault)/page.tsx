@@ -5,7 +5,6 @@ import Link from "next/link";
 import { SetupChecklist } from "@/components/dashboard/setup-checklist";
 import { RecentFiles, VaultMetrics } from "@/components/dashboard/vault-overview";
 import { PageHeader } from "@/components/common/page-header";
-import { ReadinessPanel } from "@/components/system/readiness-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -65,7 +64,6 @@ export default function DashboardPage() {
 
         <aside className="flex min-w-0 flex-col gap-4">
           <SetupChecklist />
-          <ReadinessPanel compact />
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

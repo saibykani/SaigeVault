@@ -1,14 +1,16 @@
-"""Process-wide resources (DB engine, Redis, HTTP clients, auth services)."""
+"""Process-wide resources (MongoDB, object storage, Redis, HTTP clients, auth services)."""
 
 from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 import httpx
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from saige_api.auth.google import GoogleOAuthClient
 from saige_api.auth.state import OAuthStateStore
@@ -16,16 +18,12 @@ from saige_api.auth.tokens import TokenService
 from saige_api.core.config import Settings
 from saige_api.core.logging import get_logger
 from saige_api.crypto import TokenCipher
-from saige_api.db.session import create_engine, create_session_factory
-from saige_api.health import (
-    DatabaseCheck,
-    HealthCheck,
-    QdrantCheck,
-    RedisCheck,
-    WorkerHeartbeatCheck,
-)
+from saige_api.db import create_client, database_name
+from saige_api.health import HealthCheck, MongoCheck, QdrantCheck, RedisCheck, StorageCheck
 from saige_api.kv import KeyValueStore, MemoryStore, RedisStore
 from saige_api.ratelimit import RateLimiter
+from saige_api.storage.base import ObjectStore
+from saige_api.storage.objects import MemoryObjectStore, R2ObjectStore
 
 logger = get_logger("saige_api.resources")
 
@@ -39,11 +37,31 @@ def _signing_key(settings: Settings) -> str:
     return secrets.token_urlsafe(48)
 
 
+def _object_store(settings: Settings) -> ObjectStore | None:
+    if settings.r2_configured:
+        assert settings.r2_secret_access_key is not None  # noqa: S101 - checked by r2_configured
+        endpoint = settings.r2_endpoint or (
+            f"https://{settings.r2_account_id}.r2.cloudflarestorage.com"
+        )
+        return R2ObjectStore(
+            endpoint=endpoint,
+            access_key_id=settings.r2_access_key_id or "",
+            secret_access_key=settings.r2_secret_access_key.get_secret_value(),
+            bucket=settings.r2_bucket or "",
+        )
+    if settings.storage_available:
+        logger.warning("memory_storage", reason="R2 not configured; files are kept in memory")
+        return MemoryObjectStore()
+    logger.warning("storage_disabled", reason="R2 not configured; uploads are unavailable")
+    return None
+
+
 @dataclass
 class Resources:
     settings: Settings
-    engine: AsyncEngine
-    session_factory: async_sessionmaker[AsyncSession]
+    mongo: AsyncMongoClient[dict[str, Any]]
+    db: AsyncDatabase[dict[str, Any]]
+    objects: ObjectStore | None
     redis: Redis | None
     kv: KeyValueStore
     # Separate clients: the Qdrant client carries the Qdrant API key and must
@@ -54,13 +72,14 @@ class Resources:
     oauth_state: OAuthStateStore
     rate_limiter: RateLimiter
     google: GoogleOAuthClient | None = None
-    # None when TOKEN_ENCRYPTION_KEY is unset: storage connections are then unavailable.
+    # None when TOKEN_ENCRYPTION_KEY is unset: two-step verification is then unavailable.
     cipher: TokenCipher | None = None
     health_checks: list[HealthCheck] = field(default_factory=list)
 
     @classmethod
     def create(cls, settings: Settings) -> Resources:
-        engine = create_engine(settings)
+        uri = settings.mongodb_uri.get_secret_value()
+        mongo = create_client(uri)
         redis = (
             Redis.from_url(settings.redis_url, socket_connect_timeout=2, socket_timeout=5)
             if settings.redis_url
@@ -85,10 +104,12 @@ class Resources:
                 redirect_uri=settings.google_redirect_uri or "",
                 http=external_http,
             )
+        objects = _object_store(settings)
         resources = cls(
             settings=settings,
-            engine=engine,
-            session_factory=create_session_factory(engine),
+            mongo=mongo,
+            db=mongo[database_name(uri)],
+            objects=objects,
             redis=redis,
             kv=kv,
             qdrant_http=qdrant_http,
@@ -103,12 +124,11 @@ class Resources:
                 else None
             ),
         )
-        checks: list[HealthCheck] = [DatabaseCheck(engine)]
+        checks: list[HealthCheck] = [MongoCheck(resources.db)]
+        if objects is not None:
+            checks.append(StorageCheck(objects))
         if redis is not None:
-            checks += [
-                RedisCheck(redis),
-                WorkerHeartbeatCheck(redis, settings.worker_heartbeat_max_age_seconds),
-            ]
+            checks.append(RedisCheck(redis))
         checks.append(QdrantCheck(qdrant_http, settings.qdrant_url))
         resources.health_checks = checks
         return resources
@@ -122,4 +142,4 @@ class Resources:
         await self.external_http.aclose()
         if self.redis is not None:
             await self.redis.aclose()
-        await self.engine.dispose()
+        await self.mongo.close()

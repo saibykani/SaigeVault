@@ -2,9 +2,8 @@
 
 - Argon2id (OWASP-recommended parameters); hashes are upgraded on sign-in
   when the parameters change.
-- Policy follows NIST SP 800-63B: length over composition rules, reject
-  passwords known from breaches (k-anonymity: only 5 hex chars of the SHA-1
-  ever leave the server) and passwords built from the user's own email.
+- No length or composition rules. Passwords known from breaches are
+  rejected (k-anonymity: only 5 hex chars of the SHA-1 leave the server).
 - Verification against a fixed dummy hash for unknown accounts keeps response
   times the same whether or not the email exists.
 """
@@ -23,8 +22,9 @@ from saige_api.core.logging import get_logger
 
 logger = get_logger("saige_api.auth.passwords")
 
-MIN_LENGTH = 12
-MAX_LENGTH = 128  # Argon2 accepts more, but unbounded input is a DoS vector.
+# No minimum length (owner's choice). A generous cap only protects the server:
+# hashing unbounded input is a denial-of-service vector.
+MAX_LENGTH = 1024
 PWNED_RANGE_URL = "https://api.pwnedpasswords.com/range/"
 
 # OWASP 2025 Argon2id baseline: m=19 MiB, t=2, p=1.
@@ -75,16 +75,12 @@ def needs_rehash(stored_hash: str) -> bool:
 def check_policy(password: str, *, email: str) -> None:
     """Raise WeakPasswordError with a user-facing reason."""
     value = normalize(password)
-    if len(value) < MIN_LENGTH:
-        raise WeakPasswordError(f"Use at least {MIN_LENGTH} characters.")
+    if not value:
+        raise WeakPasswordError("Enter a password.")
     if len(value) > MAX_LENGTH:
         raise WeakPasswordError(f"Use at most {MAX_LENGTH} characters.")
-    lowered = value.lower()
-    local = email.split("@", 1)[0].lower()
-    if lowered in _COMMON or len(set(lowered)) < 4:
+    if value.lower() in _COMMON:
         raise WeakPasswordError("That password is too easy to guess.")
-    if len(local) >= 4 and local in lowered:
-        raise WeakPasswordError("Don't include your email address in your password.")
 
 
 async def is_breached(http: httpx.AsyncClient, password: str) -> bool:

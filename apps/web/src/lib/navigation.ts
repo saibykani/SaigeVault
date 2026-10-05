@@ -1,5 +1,4 @@
 import {
-  Activity,
   CalendarClock,
   FolderClosed,
   LayoutDashboard,
@@ -37,7 +36,6 @@ export const PRIMARY_NAV: NavItem[] = [
 ];
 
 export const SECONDARY_NAV: NavItem[] = [
-  { href: "/system", label: "System status", icon: Activity },
   { href: "/settings", label: "Settings", icon: Settings, shortcut: ["G", "S"] },
 ];
 

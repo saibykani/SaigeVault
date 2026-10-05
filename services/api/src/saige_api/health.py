@@ -1,6 +1,6 @@
 """Dependency health checks used by the /ready endpoint.
 
-Critical checks (PostgreSQL, Redis) gate readiness. Non-critical checks
+Critical checks (MongoDB, Redis) gate readiness. Non-critical checks
 (Qdrant, worker heartbeat) only degrade it: file management keeps working
 while AI features are unavailable.
 """
@@ -13,12 +13,13 @@ from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 import httpx
+from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+
+from saige_api.storage.base import ObjectStore
 
 WORKER_HEARTBEAT_KEY = "saige:worker:heartbeat"
 
@@ -51,18 +52,28 @@ class HealthCheck(Protocol):
         ...
 
 
-class DatabaseCheck:
+class MongoCheck:
     name = "database"
     critical = True
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self._engine = engine
+    def __init__(self, db: AsyncDatabase[dict[str, Any]]) -> None:
+        self._db = db
 
     async def check(self) -> str | None:
-        async with self._engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-            revision = await conn.scalar(text("SELECT version_num FROM alembic_version LIMIT 1"))
-        return f"schema={revision}" if revision else "schema=unmigrated"
+        await self._db.command("ping")
+        return "mongodb"
+
+
+class StorageCheck:
+    name = "storage"
+    critical = False  # browsing and sign-in keep working; uploads fail clearly
+
+    def __init__(self, store: ObjectStore) -> None:
+        self._store = store
+
+    async def check(self) -> str | None:
+        await self._store.ping()
+        return self._store.name
 
 
 class RedisCheck:

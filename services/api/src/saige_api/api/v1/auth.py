@@ -10,8 +10,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from saige_api.api.deps import ResourcesDep, SessionDep
-from saige_api.api.v1.storage import complete_drive_connect, drive_redirect
+from saige_api.api.deps import DbDep, ResourcesDep
 from saige_api.audit import client_ip, record_audit, record_security_event, user_agent
 from saige_api.auth.cookies import REFRESH_COOKIE, clear_session_cookies, set_session_cookies
 from saige_api.auth.deps import CurrentUserDep, verify_csrf
@@ -23,12 +22,12 @@ from saige_api.auth.sessions import (
     RevokeReason,
     SessionService,
 )
-from saige_api.auth.state import DRIVE_CONNECT, PendingLogin, safe_next_path
+from saige_api.auth.state import PendingLogin, safe_next_path
 from saige_api.auth.tokens import new_csrf_token
 from saige_api.auth.users import user_for_dev_login, user_for_google_identity
 from saige_api.core.errors import AppError, NotFoundError, UnauthorizedError, error_response
 from saige_api.core.logging import get_logger
-from saige_api.models.enums import AuditAction, ClientPlatform, SecuritySeverity
+from saige_api.enums import AuditAction, ClientPlatform, SecuritySeverity
 from saige_api.resources import Resources
 from saige_api.schemas.auth import (
     DevLoginRequest,
@@ -38,7 +37,7 @@ from saige_api.schemas.auth import (
     SessionResponse,
     SessionSummary,
     TokenPair,
-    UserProfile,
+    user_profile,
 )
 from saige_api.schemas.system import ErrorResponse
 
@@ -123,7 +122,7 @@ async def google_callback(  # noqa: PLR0911 - one early return per failure mode
     request: Request,
     *,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
     code: str | None = Query(default=None, max_length=2048),
     state: str | None = Query(default=None, max_length=128),
     error: str | None = Query(default=None, max_length=128),
@@ -133,12 +132,6 @@ async def google_callback(  # noqa: PLR0911 - one early return per failure mode
         return _login_error(resources, "google_not_configured")
     # Consume state first so it is single-use even when Google reports an error.
     pending = await resources.oauth_state.consume(state or "")
-    if pending is not None and pending.purpose == DRIVE_CONNECT:
-        if error or not code:
-            return drive_redirect(
-                resources, pending.next_path, error="access_denied" if error else "missing_code"
-            )
-        return await complete_drive_connect(request, resources, db, pending, code)
     if error:
         return _login_error(
             resources, "access_denied" if error == "access_denied" else "google_error"
@@ -153,7 +146,7 @@ async def google_callback(  # noqa: PLR0911 - one early return per failure mode
         user = await user_for_google_identity(db, identity)
     except GoogleAuthError as exc:
         logger.warning("google_login_failed", reason=exc.code)
-        record_audit(
+        await record_audit(
             db,
             request,
             AuditAction.LOGIN,
@@ -161,21 +154,18 @@ async def google_callback(  # noqa: PLR0911 - one early return per failure mode
             outcome="failure",
             details={"method": "google", "reason": exc.code},
         )
-        await db.commit()
         return _login_error(resources, exc.code)
     except AppError as exc:
-        await db.rollback()
         return _login_error(resources, exc.code)
 
     issued = await SessionService(db, resources.refresh_ttl).create(user.id, _client(request))
-    record_audit(
+    await record_audit(
         db,
         request,
         AuditAction.LOGIN,
         user_id=user.id,
         details={"method": "google", "session_id": str(issued.session_id)},
     )
-    await db.commit()
     response = _web_redirect(resources, pending.next_path)
     _start_session_response(response, resources, issued)
     return response
@@ -192,7 +182,7 @@ async def dev_login(
     request: Request,
     response: Response,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> SessionResponse:
     settings = resources.settings
     if not settings.dev_login_enabled or settings.is_production:
@@ -201,17 +191,16 @@ async def dev_login(
     await _rate_limit(resources, request, "dev_login")
     user = await user_for_dev_login(db, str(body.email), body.display_name)
     issued = await SessionService(db, resources.refresh_ttl).create(user.id, _client(request))
-    record_audit(
+    await record_audit(
         db,
         request,
         AuditAction.LOGIN,
         user_id=user.id,
         details={"method": "dev", "session_id": str(issued.session_id)},
     )
-    await db.commit()
     access_expires_at = _start_session_response(response, resources, issued)
     return SessionResponse(
-        user=UserProfile.model_validate(user, from_attributes=True),
+        user=user_profile(user),
         session_id=issued.session_id,
         access_expires_at=access_expires_at,
     )
@@ -227,7 +216,7 @@ async def refresh(
     request: Request,
     response: Response,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
     body: RefreshRequest | None = None,
 ) -> RefreshResponse | JSONResponse:
     await _rate_limit(resources, request, "refresh")
@@ -245,7 +234,7 @@ async def refresh(
     )
 
     if result.outcome is RefreshOutcome.REUSE_DETECTED:
-        record_security_event(
+        await record_security_event(
             db,
             request,
             "refresh_token_reuse",
@@ -254,7 +243,6 @@ async def refresh(
             user_id=result.user_id,
             details={"session_id": str(result.session_id)},
         )
-        await db.commit()
         return _unauthorized_and_clear(
             request, resources, "Session revoked for your protection. Please sign in again."
         )
@@ -262,10 +250,7 @@ async def refresh(
         # Another tab refreshed a moment ago; its cookies are already in the jar.
         raise UnauthorizedError("Session was just refreshed; retry the request")
     if result.outcome is RefreshOutcome.INVALID or result.issued is None:
-        await db.commit()
         return _unauthorized_and_clear(request, resources, "Session expired. Please sign in again.")
-
-    await db.commit()
     issued = result.issued
     if via_cookie:
         expires = _start_session_response(response, resources, issued)
@@ -284,7 +269,7 @@ async def refresh(
 
 
 @router.post("/logout", summary="Sign out of this session", status_code=204)
-async def logout(request: Request, resources: ResourcesDep, db: SessionDep) -> Response:
+async def logout(request: Request, resources: ResourcesDep, db: DbDep) -> Response:
     sessions = SessionService(db, resources.refresh_ttl)
     token = request.cookies.get(REFRESH_COOKIE)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -294,14 +279,13 @@ async def logout(request: Request, resources: ResourcesDep, db: SessionDep) -> R
         if found:
             user_id, family_id = found
             await sessions.revoke_family(user_id, family_id, RevokeReason.LOGOUT)
-            record_audit(
+            await record_audit(
                 db,
                 request,
                 AuditAction.LOGOUT,
                 user_id=user_id,
                 details={"session_id": str(family_id)},
             )
-            await db.commit()
     clear_session_cookies(response, resources.settings)
     return response
 
@@ -314,7 +298,7 @@ async def logout(request: Request, resources: ResourcesDep, db: SessionDep) -> R
 )
 async def current_session(auth: CurrentUserDep) -> SessionResponse:
     return SessionResponse(
-        user=UserProfile.model_validate(auth.user, from_attributes=True),
+        user=user_profile(auth.user),
         session_id=auth.session_id,
         access_expires_at=auth.access_expires_at,
     )
@@ -327,7 +311,7 @@ async def current_session(auth: CurrentUserDep) -> SessionResponse:
     responses=ERROR_RESPONSES,
 )
 async def list_sessions(
-    auth: CurrentUserDep, resources: ResourcesDep, db: SessionDep
+    auth: CurrentUserDep, resources: ResourcesDep, db: DbDep
 ) -> SessionListResponse:
     rows = await SessionService(db, resources.refresh_ttl).list_active(auth.user_id)
     return SessionListResponse(
@@ -358,21 +342,20 @@ async def revoke_session(
     request: Request,
     auth: CurrentUserDep,
     resources: ResourcesDep,
-    db: SessionDep,
+    db: DbDep,
 ) -> Response:
     revoked = await SessionService(db, resources.refresh_ttl).revoke_family(
         auth.user_id, session_id, RevokeReason.USER_REVOKED
     )
     if revoked == 0:
         raise NotFoundError("Session not found")
-    record_audit(
+    await record_audit(
         db,
         request,
         AuditAction.LOGOUT,
         user_id=auth.user_id,
         details={"session_id": str(session_id), "reason": "user_revoked"},
     )
-    await db.commit()
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     if session_id == auth.session_id:
         clear_session_cookies(response, resources.settings)

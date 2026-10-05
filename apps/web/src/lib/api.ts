@@ -5,12 +5,9 @@ import {
   createApiClient,
   createAuthFetch,
   type PasswordLoginResponse,
-  type ReadinessResponse,
   type SecurityOverview,
   type SessionResponse,
   type SessionSummary,
-  type StorageConnectionSummary,
-  type StorageQuotaResponse,
   type SystemInfoResponse,
 } from "@saige/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -37,27 +34,11 @@ export const api = createApiClient({
 });
 
 export const queryKeys = {
-  readiness: ["system", "readiness"] as const,
   systemInfo: ["system", "info"] as const,
   session: ["auth", "session"] as const,
   sessions: ["auth", "sessions"] as const,
   security: ["auth", "security"] as const,
-  storageConnections: ["storage", "connections"] as const,
-  storageQuota: (id: string) => ["storage", "quota", id] as const,
 };
-
-/** Starts the Drive consent flow (full-page navigation through Google). */
-export function driveConnectUrl(next = "/settings#storage"): string {
-  return `/api/v1/storage/google-drive/connect?next=${encodeURIComponent(next)}`;
-}
-
-/** Readiness is meaningful even on 503, so the body is returned either way. */
-async function fetchReadiness(): Promise<ReadinessResponse> {
-  const { data, error, response } = await api.GET("/ready");
-  if (data) return data;
-  if (response.status === 503 && error) return error as ReadinessResponse;
-  throw ApiError.fromResponse(response.status, error);
-}
 
 async function fetchSystemInfo(): Promise<SystemInfoResponse> {
   const { data, error, response } = await api.GET("/api/v1/system/info");
@@ -77,15 +58,6 @@ async function fetchSessions(): Promise<SessionSummary[]> {
   const { data, error, response } = await api.GET("/api/v1/auth/sessions");
   if (data) return data.sessions;
   throw ApiError.fromResponse(response.status, error);
-}
-
-export function useReadiness(options?: { refetchInterval?: number }) {
-  return useQuery({
-    queryKey: queryKeys.readiness,
-    queryFn: fetchReadiness,
-    refetchInterval: options?.refetchInterval ?? 30_000,
-    retry: 1,
-  });
 }
 
 /** Free hosting sleeps when idle and takes up to ~a minute to wake. Retry for ~90 s. */
@@ -244,48 +216,8 @@ export function useTotpDisable() {
   });
 }
 
-async function fetchStorageConnections(): Promise<StorageConnectionSummary[]> {
-  const { data, error, response } = await api.GET("/api/v1/storage/connections");
-  if (data) return data.connections;
-  if (response.status === 401) return [];
-  throw ApiError.fromResponse(response.status, error);
-}
-
-export function useStorageConnections(enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.storageConnections,
-    queryFn: fetchStorageConnections,
-    enabled,
-  });
-}
-
-export function useStorageQuota(connectionId: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.storageQuota(connectionId ?? ""),
-    enabled: Boolean(connectionId),
-    retry: false,
-    queryFn: async (): Promise<StorageQuotaResponse> => {
-      const { data, error, response } = await api.GET(
-        "/api/v1/storage/connections/{connection_id}/quota",
-        { params: { path: { connection_id: connectionId ?? "" } } },
-      );
-      if (data) return data;
-      throw ApiError.fromResponse(response.status, error);
-    },
-  });
-}
-
-export function useDisconnectStorage() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (connectionId: string) => {
-      const { data, error, response } = await api.POST(
-        "/api/v1/storage/connections/{connection_id}/disconnect",
-        { params: { path: { connection_id: connectionId } } },
-      );
-      if (!data) throw ApiError.fromResponse(response.status, error);
-      return data;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["storage"] }),
-  });
+/** True when the server can store uploads (Cloudflare R2 configured). */
+export function useStorageReady(): boolean {
+  const { data } = useSystemInfo();
+  return data?.storage_available ?? false;
 }

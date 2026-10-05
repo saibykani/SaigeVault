@@ -27,7 +27,7 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.16",
     "mypy>=2.3",
-    "testcontainers[postgres,redis]>=4.15",
+    "testcontainers[mongodb,redis]>=4.15",
     "psycopg[binary]>=3.3",
     "pip-audit>=2.9",
 ]
@@ -57,7 +57,7 @@ explicit_package_bases = true
 exclude = ["database/migrations/versions/"]
 
 [[tool.mypy.overrides]]
-module = ["saq.*", "testcontainers.*", "croniter.*"]
+module = ["saq.*", "testcontainers.*", "croniter.*", "boto3.*", "botocore.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

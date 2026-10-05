@@ -2,8 +2,8 @@
 # Render dashboard → New → Blueprint → pick this repository.
 # Full guide: docs/deployment/free-hosting.md
 #
-# Database (Neon) and Redis (Upstash) are external free services; paste
-# their URLs when Render asks. Render generates JWT_SECRET and
+# MongoDB (Atlas) and Cloudflare R2 are external free services; paste
+# their settings when Render asks. Render generates JWT_SECRET and
 # TOKEN_ENCRYPTION_KEY for you — they never appear in the repository.
 services:
   - type: web
@@ -13,7 +13,7 @@ services:
     region: singapore
     dockerfilePath: ./infrastructure/docker/backend.Dockerfile
     dockerContext: .
-    # The image's entrypoint applies migrations and serves on Render's $PORT.
+    # The image serves on Render's $PORT and creates MongoDB indexes on start.
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -21,9 +21,20 @@ services:
         value: production
       - key: LOG_LEVEL
         value: INFO
-      # Paste from Neon (Connection string). Any postgresql:// URL works.
-      - key: DATABASE_URL
+      # MongoDB Atlas connection string, with the database name after .net/
+      # e.g. mongodb+srv://user:pass@cluster.mongodb.net/saige_vault?appName=x
+      # (write any @ inside the password as %40).
+      - key: MONGODB_URI
         sync: false
+      # Cloudflare R2 → R2 Object Storage → Manage API tokens (Object Read & Write).
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: saige-vault
       # Optional: Upstash rediss:// URL. Leave empty to keep state in-process
       # (fine for a single free instance).
       - key: REDIS_URL

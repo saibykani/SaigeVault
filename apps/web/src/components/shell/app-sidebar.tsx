@@ -112,7 +112,7 @@ export function AppSidebar() {
 /** Bottom tab bar for small screens. */
 export function MobileNav() {
   const pathname = usePathname();
-  const items = [...PRIMARY_NAV.slice(0, 4), SECONDARY_NAV[1]!];
+  const items = [...PRIMARY_NAV.slice(0, 4), SECONDARY_NAV[0]!];
   return (
     <nav
       aria-label="Main navigation"

@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCompleteMfaLogin, usePasswordLogin, useRegister } from "@/lib/api";
 
-export const MIN_PASSWORD_LENGTH = 12;
-
 export type Mode = "sign-in" | "register";
 
 function errorText(error: unknown): string | null {
@@ -43,7 +41,7 @@ export function PasswordField({
           type={visible ? "text" : "password"}
           required
           minLength={minLength}
-          maxLength={128}
+          maxLength={1024}
           autoComplete={autoComplete}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -207,13 +205,7 @@ export function PasswordForm({
         value={password}
         onChange={setPassword}
         autoComplete={mode === "register" ? "new-password" : "current-password"}
-        minLength={mode === "register" ? MIN_PASSWORD_LENGTH : undefined}
       />
-      {mode === "register" ? (
-        <p className="text-xs text-muted-foreground">
-          {MIN_PASSWORD_LENGTH}–128 characters. A few random words is strong and easy to remember.
-        </p>
-      ) : null}
       {active.isError ? (
         <p role="alert" className="text-xs text-destructive">
           {errorText(active.error)}

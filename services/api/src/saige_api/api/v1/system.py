@@ -20,6 +20,6 @@ async def system_info(resources: ResourcesDep) -> SystemInfoResponse:
         ai_processing_policy=settings.ai_processing_policy.value,
         google_oauth_configured=settings.google_oauth_configured,
         dev_login_enabled=settings.dev_login_enabled and not settings.is_production,
-        google_drive_available=settings.google_drive_available,
+        storage_available=getattr(resources, "objects", None) is not None,
         password_login_enabled=settings.password_login_enabled,
     )

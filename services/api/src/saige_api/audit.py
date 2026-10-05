@@ -10,10 +10,13 @@ import uuid
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from saige_api.models import AuditLog, SecurityEvent
-from saige_api.models.enums import ActorType, AuditAction, SecuritySeverity
+from saige_api.api.deps import Database
+from saige_api.core.logging import get_logger
+from saige_api.db import new_id, now
+from saige_api.enums import ActorType, AuditAction, SecuritySeverity
+
+logger = get_logger("saige_api.audit")
 
 
 def client_ip(request: Request) -> str | None:
@@ -30,8 +33,8 @@ def _request_id(request: Request) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def record_audit(
-    db: AsyncSession,
+async def record_audit(
+    db: Database,
     request: Request,
     action: AuditAction,
     *,
@@ -42,24 +45,29 @@ def record_audit(
     outcome: str = "success",
     details: dict[str, Any] | None = None,
 ) -> None:
-    db.add(
-        AuditLog(
-            user_id=user_id,
-            actor_type=actor,
-            action=action,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            outcome=outcome,
-            request_id=_request_id(request),
-            ip_address=client_ip(request),
-            user_agent=user_agent(request),
-            details=details or {},
+    try:
+        await db.audit_logs.insert_one(
+            {
+                "_id": new_id(),
+                "user_id": user_id,
+                "actor_type": actor.value,
+                "action": action.value,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "outcome": outcome,
+                "request_id": _request_id(request),
+                "ip_address": client_ip(request),
+                "user_agent": user_agent(request),
+                "details": details or {},
+                "created_at": now(),
+            }
         )
-    )
+    except Exception as exc:
+        logger.warning("audit_write_failed", error=type(exc).__name__)
 
 
-def record_security_event(
-    db: AsyncSession,
+async def record_security_event(
+    db: Database,
     request: Request,
     event_type: str,
     severity: SecuritySeverity,
@@ -68,23 +76,23 @@ def record_security_event(
     user_id: uuid.UUID | None,
     details: dict[str, Any] | None = None,
 ) -> None:
-    db.add(
-        SecurityEvent(
-            user_id=user_id,
-            event_type=event_type,
-            severity=severity,
-            description=description,
-            request_id=_request_id(request),
-            ip_address=client_ip(request),
-            details=details or {},
+    try:
+        await db.security_events.insert_one(
+            {
+                "_id": new_id(),
+                "user_id": user_id,
+                "event_type": event_type,
+                "severity": severity.value,
+                "description": description,
+                "request_id": _request_id(request),
+                "ip_address": client_ip(request),
+                "details": details or {},
+                "created_at": now(),
+            }
         )
-    )
-    record_audit(
-        db,
-        request,
-        AuditAction.SECURITY_EVENT,
-        user_id=user_id,
-        actor=ActorType.SYSTEM,
-        outcome="detected",
-        details={"event_type": event_type, "severity": severity.value},
-    )
+    except Exception as exc:
+        logger.warning("security_event_write_failed", error=type(exc).__name__)
+    await record_audit(
+        db, request, AuditAction.SECURITY_EVENT, user_id=user_id, actor=ActorType.SYSTEM,
+        outcome="detected", details={"event_type": event_type, "severity": severity.value},
+    )  # fmt: skip

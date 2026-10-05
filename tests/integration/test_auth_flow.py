@@ -10,8 +10,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from google_fake import FakeGoogle  # services/api/tests (pytest pythonpath)
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from pymongo.asynchronous.database import AsyncDatabase
 
 from saige_api.auth import sessions as sessions_module
 
@@ -44,7 +43,9 @@ async def dev_sign_in(client: httpx.AsyncClient, email: str | None = None) -> ht
     return response
 
 
-async def test_google_sign_in_sets_secure_session(make_client: Any, engine: AsyncEngine) -> None:
+async def test_google_sign_in_sets_secure_session(
+    make_client: Any, db: AsyncDatabase[dict[str, Any]]
+) -> None:
     async for client, fake, _drive in make_client():
         fake.identity["sub"] = f"sub-{uuid.uuid4().hex}"
         fake.identity["email"] = f"alice-{uuid.uuid4().hex[:6]}@example.com"
@@ -66,14 +67,11 @@ async def test_google_sign_in_sets_secure_session(make_client: Any, engine: Asyn
         assert session.status_code == 200
         assert session.json()["user"]["email"] == fake.identity["email"]
 
-        async with engine.connect() as conn:
-            logins = await conn.scalar(
-                text(
-                    "SELECT count(*) FROM audit_logs a JOIN users u ON u.id = a.user_id "
-                    "WHERE u.email = :e AND a.action = 'LOGIN' AND a.outcome = 'success'"
-                ),
-                {"e": fake.identity["email"]},
-            )
+        user = await db.users.find_one({"email_lower": fake.identity["email"].lower()})
+        assert user is not None
+        logins = await db.audit_logs.count_documents(
+            {"user_id": user["_id"], "action": "LOGIN", "outcome": "success"}
+        )
         assert logins == 1
 
 
@@ -120,7 +118,7 @@ async def test_open_redirect_is_neutralised(make_client: Any) -> None:
 
 
 async def test_refresh_rotates_and_detects_reuse(
-    make_client: Any, monkeypatch: pytest.MonkeyPatch, engine: AsyncEngine
+    make_client: Any, monkeypatch: pytest.MonkeyPatch, db: AsyncDatabase[dict[str, Any]]
 ) -> None:
     monkeypatch.setattr(sessions_module, "ROTATION_GRACE", sessions_module.timedelta(0))
     async for client, _fake, _drive in make_client():
@@ -142,14 +140,9 @@ async def test_refresh_rotates_and_detects_reuse(
 
         # The legitimate session is revoked as a precaution.
         assert (await client.get("/api/v1/auth/session")).status_code == 401
-        async with engine.connect() as conn:
-            events = await conn.scalar(
-                text(
-                    "SELECT count(*) FROM security_events WHERE event_type = 'refresh_token_reuse' "
-                    "AND details->>'session_id' = :sid"
-                ),
-                {"sid": session_id},
-            )
+        events = await db.security_events.count_documents(
+            {"event_type": "refresh_token_reuse", "details.session_id": session_id}
+        )
         assert events == 1
 
 

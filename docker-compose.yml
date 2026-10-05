@@ -14,7 +14,8 @@ name: saige-vault
 x-python-env: &python-env
   APP_ENV: ${APP_ENV:-development}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-saige}:${POSTGRES_PASSWORD:-change-me-local-only}@postgres:5432/${POSTGRES_DB:-saige_vault}
+  MONGODB_URI: mongodb://mongo:27017/saige_vault
+  MEMORY_STORAGE: ${MEMORY_STORAGE:-true}
   REDIS_URL: redis://redis:6379/0
   QDRANT_URL: http://qdrant:6333
   QDRANT_API_KEY: ${QDRANT_API_KEY:-}
@@ -32,17 +33,13 @@ x-python-env: &python-env
   AI_PROCESSING_POLICY: ${AI_PROCESSING_POLICY:-disabled}
 
 services:
-  postgres:
-    image: postgres:17-alpine
+  mongo:
+    image: mongo:8.0
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-saige}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
-      POSTGRES_DB: ${POSTGRES_DB:-saige_vault}
-    ports: ["127.0.0.1:5432:5432"]
-    volumes: [postgres-data:/var/lib/postgresql/data]
+    ports: ["127.0.0.1:27017:27017"]
+    volumes: [mongo-data:/data/db]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -69,16 +66,6 @@ services:
     ports: ["127.0.0.1:6333:6333"]
     volumes: [qdrant-data:/qdrant/storage]
 
-  migrate:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/backend.Dockerfile
-    environment: *python-env
-    command: ["alembic", "-c", "services/api/alembic.ini", "upgrade", "head"]
-    depends_on:
-      postgres: { condition: service_healthy }
-    restart: "no"
-
   api:
     build:
       context: .
@@ -91,7 +78,6 @@ services:
     environment: *python-env
     ports: ["${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"]
     depends_on:
-      migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
       qdrant: { condition: service_started }
     healthcheck:
@@ -113,7 +99,6 @@ services:
     restart: unless-stopped
     environment: *python-env
     depends_on:
-      migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
 
   web:
@@ -128,6 +113,6 @@ services:
       api: { condition: service_healthy }
 
 volumes:
-  postgres-data:
+  mongo-data:
   redis-data:
   qdrant-data:

@@ -60,27 +60,23 @@ def test_production_rejects_dev_login() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        (
-            "postgresql://u:p@ep-x.neon.tech/neondb?sslmode=require&channel_binding=require",
-            "postgresql+asyncpg://u:p@ep-x.neon.tech/neondb?ssl=require",
-        ),
-        (
-            "postgres://u:p@db.example.com:5432/app",
-            "postgresql+asyncpg://u:p@db.example.com:5432/app",
-        ),
-        ("postgresql+asyncpg://u:p@localhost/db", "postgresql+asyncpg://u:p@localhost/db"),
-    ],
-)
-def test_hosted_database_urls_are_normalized(raw: str, expected: str) -> None:
-    assert make_settings(database_url=raw).database_url == expected
+def test_storage_needs_r2_settings_or_memory_mode() -> None:
+    assert not make_settings().storage_available
+    assert make_settings(memory_storage=True).storage_available
+    r2 = make_settings(
+        r2_account_id="acc", r2_access_key_id="k", r2_secret_access_key="s", r2_bucket="b"
+    )
+    assert r2.r2_configured and r2.storage_available
 
 
-def test_non_postgres_database_url_rejected() -> None:
-    with pytest.raises(ValidationError, match="PostgreSQL"):
-        make_settings(database_url="mysql://u:p@localhost/db")
+def test_memory_storage_refused_in_production() -> None:
+    with pytest.raises(ValidationError, match="MEMORY_STORAGE"):
+        make_settings(
+            app_env=Environment.PRODUCTION,
+            jwt_secret="x" * 48,
+            token_encryption_key=TEST_KEY,
+            memory_storage=True,
+        )
 
 
 def test_redis_is_off_unless_configured() -> None:

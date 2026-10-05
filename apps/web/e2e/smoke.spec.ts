@@ -38,7 +38,6 @@ const PAGES = [
   { path: "/ask", heading: "Ask Saige" },
   { path: "/timeline", heading: "Timeline" },
   { path: "/settings", heading: "Settings" },
-  { path: "/system", heading: "System status" },
   { path: "/login", heading: "Sign in to your vault" },
 ];
 

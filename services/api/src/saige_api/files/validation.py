@@ -17,7 +17,7 @@ import zipfile
 from dataclasses import dataclass
 from typing import BinaryIO
 
-from saige_api.models.enums import DocumentType
+from saige_api.enums import DocumentType
 
 MAX_FILENAME_LENGTH = 255
 ZIP_MAX_ENTRIES = 10_000

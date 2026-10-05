@@ -1,9 +1,9 @@
 "use client";
 
+import { formatBytes } from "@saige/shared";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import type * as React from "react";
-import { Suspense } from "react";
 
 import { FeatureNotice } from "@/components/common/feature-notice";
 import { useMounted } from "@/components/shell/theme-toggle";
@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AccountSecurity } from "@/components/settings/account-security";
-import { DriveConnection } from "@/components/settings/drive-connection";
 import { SessionsList } from "@/components/settings/sessions-list";
+import { useFileStats } from "@/lib/files-api";
 import { useSystemInfo } from "@/lib/api";
 
 function Section({
@@ -57,6 +57,35 @@ const POLICY_LABEL = {
   local_only: { text: "Local models only", variant: "success" },
   third_party_allowed: { text: "Third-party providers allowed", variant: "warning" },
 } as const;
+
+const FREE_TIER_BYTES = 10 * 1024 ** 3;
+
+function StorageUsage() {
+  const { data: info } = useSystemInfo();
+  const { data: stats } = useFileStats();
+  const used = stats?.total_bytes ?? 0;
+  return (
+    <div className="space-y-2 rounded-md border px-3 py-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-medium">Cloudflare R2</span>
+        {info?.storage_available ? (
+          <Badge variant="success">Ready</Badge>
+        ) : (
+          <Badge variant="warning">Not configured</Badge>
+        )}
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${Math.min(100, (used / FREE_TIER_BYTES) * 100)}%` }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {formatBytes(used)} of 10 GB free tier · {stats?.total_files ?? 0} files
+      </p>
+    </div>
+  );
+}
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
@@ -110,11 +139,9 @@ export function SettingsView() {
       <Section
         id="storage"
         title="Storage"
-        description="Saige keeps your original files in your own cloud storage."
+        description="Your files are stored privately in Cloudflare R2."
       >
-        <Suspense fallback={<Skeleton className="h-28" />}>
-          <DriveConnection />
-        </Suspense>
+        <StorageUsage />
       </Section>
 
       <Section

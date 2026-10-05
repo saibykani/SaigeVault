@@ -18,34 +18,6 @@ from saige_ai.policy import AIProcessingPolicy
 __all__ = ["AIProcessingPolicy", "Environment", "Settings", "get_settings"]
 
 
-def normalize_database_url(value: str) -> str:
-    """Accept URLs exactly as hosted providers (Neon, Supabase, Render) print them.
-
-    - postgres:// and postgresql:// become postgresql+asyncpg://
-    - libpq's sslmode=... becomes asyncpg's ssl=...
-    - libpq-only options asyncpg rejects (channel_binding, ...) are dropped
-    """
-    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit  # noqa: PLC0415
-
-    url = value.strip()
-    for prefix in ("postgres://", "postgresql://"):
-        if url.startswith(prefix):
-            url = "postgresql+asyncpg://" + url[len(prefix) :]
-    if not url.startswith("postgresql+asyncpg://"):
-        raise ValueError("DATABASE_URL must be a PostgreSQL URL (postgresql://...)")
-    parts = urlsplit(url)
-    query: list[tuple[str, str]] = []
-    for key, val in parse_qsl(parts.query, keep_blank_values=True):
-        if key == "sslmode":
-            if val in {"require", "verify-ca", "verify-full", "prefer", "allow"}:
-                query.append(("ssl", val))
-        elif key in {"channel_binding", "options", "application_name", "target_session_attrs"}:
-            continue
-        else:
-            query.append((key, val))
-    return urlunsplit(parts._replace(query=urlencode(query)))
-
-
 class Environment(StrEnum):
     DEVELOPMENT = "development"
     TEST = "test"
@@ -69,9 +41,21 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
-    database_url: str = "postgresql+asyncpg://saige:saige@localhost:5432/saige_vault"
-    database_pool_size: int = 10
-    database_max_overflow: int = 10
+    # MongoDB connection string. The database name comes from the URI path
+    # (e.g. ...mongodb.net/saige_vault?...) and defaults to "saige_vault".
+    mongodb_uri: SecretStr = SecretStr("mongodb://localhost:27017/saige_vault")
+
+    # Cloudflare R2 (S3-compatible). Without these, uploads are unavailable
+    # (development and tests can use the in-memory store instead).
+    r2_account_id: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: SecretStr | None = None
+    r2_bucket: str | None = None
+    # Override the endpoint (e.g. a local S3-compatible server). Defaults to
+    # https://<account_id>.r2.cloudflarestorage.com
+    r2_endpoint: str | None = None
+    # Development/test only: keep files in memory when R2 isn't configured.
+    memory_storage: bool = False
 
     # Optional. Without Redis, short-lived state is kept in-process, which is
     # only correct for a single API instance (fine for one free container).
@@ -103,12 +87,8 @@ class Settings(BaseSettings):
     password_breach_check: bool = True
     registrations_per_hour_per_ip: int = Field(default=10, ge=1)
 
-    # Least privilege by default: Saige only sees files it created (its own
-    # "Saige Vault" folder), never the rest of the user's Drive.
-    google_drive_scope: str = "https://www.googleapis.com/auth/drive.file"
     max_upload_bytes: int = Field(default=100 * 1024 * 1024, ge=1024, le=5 * 1024**3)
     upload_rate_limit_per_minute: int = Field(default=120, ge=1)
-    google_drive_root_folder_name: str = Field(default="Saige Vault", min_length=1, max_length=100)
 
     ai_processing_policy: AIProcessingPolicy = AIProcessingPolicy.DISABLED
 
@@ -130,6 +110,11 @@ class Settings(BaseSettings):
         "google_client_secret",
         "cookie_secure",
         "redis_url",
+        "r2_secret_access_key",
+        "r2_account_id",
+        "r2_access_key_id",
+        "r2_bucket",
+        "r2_endpoint",
         mode="before",
     )
     @classmethod
@@ -144,11 +129,6 @@ class Settings(BaseSettings):
 
             decode_key(value.get_secret_value())
         return value
-
-    @field_validator("database_url")
-    @classmethod
-    def _require_async_driver(cls, value: str) -> str:
-        return normalize_database_url(value)
 
     @model_validator(mode="after")
     def _enforce_production_requirements(self) -> Settings:
@@ -172,6 +152,8 @@ class Settings(BaseSettings):
             raise ValueError("DEV_LOGIN_ENABLED must not be set in production")
         if self.cookie_secure is False:
             raise ValueError("COOKIE_SECURE cannot be disabled in production")
+        if self.memory_storage:
+            raise ValueError("MEMORY_STORAGE is for development only")
         return self
 
     @property
@@ -179,8 +161,17 @@ class Settings(BaseSettings):
         return self.cookie_secure if self.cookie_secure is not None else self.is_production
 
     @property
-    def google_drive_available(self) -> bool:
-        return self.google_oauth_configured and self.token_encryption_key is not None
+    def r2_configured(self) -> bool:
+        return bool(
+            self.r2_access_key_id
+            and self.r2_secret_access_key
+            and self.r2_bucket
+            and (self.r2_endpoint or self.r2_account_id)
+        )
+
+    @property
+    def storage_available(self) -> bool:
+        return self.r2_configured or (self.memory_storage and not self.is_production)
 
     @property
     def google_oauth_configured(self) -> bool:

@@ -1,50 +1,51 @@
-"""Integration fixtures backed by a real PostgreSQL.
+"""Integration fixtures backed by a real MongoDB (and Redis when available).
 
-Resolution order:
-1. TEST_DATABASE_URL (CI service container, or a local database you own).
-2. A throwaway testcontainers PostgreSQL if Docker is available.
+Resolution order for MongoDB:
+1. TEST_MONGODB_URL (CI service container, or a local server you own).
+2. A throwaway testcontainers MongoDB if Docker is available.
 3. Otherwise integration tests are skipped (never silently "passed").
 
-The database is migrated with Alembic, so these tests exercise the real
-migration rather than metadata.create_all().
+File content goes to an in-memory object store standing in for Cloudflare R2.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator, Iterator
-from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
+import httpx
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from google_fake import CLIENT_ID, FakeGoogle  # services/api/tests on pythonpath
+from pymongo.asynchronous.database import AsyncDatabase
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ALEMBIC_INI = REPO_ROOT / "services" / "api" / "alembic.ini"
+from saige_api.auth.google import GoogleOAuthClient
+from saige_api.core.config import Environment, Settings
+from saige_api.crypto import generate_key
+from saige_api.db import create_client
+from saige_api.main import create_app
+from saige_api.resources import Resources
+from saige_api.storage.objects import MemoryObjectStore
+
+TEST_DB = "saige_test"
 
 
 @pytest.fixture(scope="session")
-def database_url() -> Iterator[str]:
-    explicit = os.environ.get("TEST_DATABASE_URL")
+def mongodb_url() -> Iterator[str]:
+    explicit = os.environ.get("TEST_MONGODB_URL")
     if explicit:
-        # The fixture drops and recreates the schema. Refuse anything that does
-        # not look like a dedicated test database.
-        if "test" not in make_url(explicit).database.lower():  # type: ignore[union-attr]
-            pytest.exit("TEST_DATABASE_URL database name must contain 'test'", returncode=2)
         yield explicit
         return
     try:
-        from testcontainers.community.postgres import PostgresContainer  # noqa: PLC0415
+        from testcontainers.mongodb import MongoDbContainer  # noqa: PLC0415
     except ImportError:  # pragma: no cover
-        pytest.skip("testcontainers not installed and TEST_DATABASE_URL not set")
+        pytest.skip("testcontainers not installed and TEST_MONGODB_URL not set")
     try:
-        container = PostgresContainer("postgres:17-alpine", driver="asyncpg")
+        container = MongoDbContainer("mongo:8.0")
         container.start()
     except Exception as exc:  # Docker not available
-        pytest.skip(f"No TEST_DATABASE_URL and Docker unavailable: {type(exc).__name__}")
+        pytest.skip(f"No TEST_MONGODB_URL and Docker unavailable: {type(exc).__name__}")
     try:
         yield container.get_connection_url()
     finally:
@@ -52,7 +53,23 @@ def database_url() -> Iterator[str]:
 
 
 @pytest.fixture(scope="session")
-def redis_url() -> Iterator[str]:
+def mongodb_uri(mongodb_url: str) -> str:
+    """URI pointing at the dedicated test database (dropped once per session)."""
+    parsed = urlparse(mongodb_url)
+    query = parsed.query
+    if parsed.username and "authSource" not in query:
+        query = "&".join(filter(None, [query, "authSource=admin"]))
+    uri = parsed._replace(path=f"/{TEST_DB}", query=query).geturl()
+    import pymongo  # noqa: PLC0415
+
+    client: pymongo.MongoClient[dict[str, Any]] = pymongo.MongoClient(uri)
+    client.drop_database(TEST_DB)
+    client.close()
+    return uri
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> Iterator[str | None]:
     explicit = os.environ.get("TEST_REDIS_URL")
     if explicit:
         # Auth tests FLUSHDB between runs; never allow the default database 0.
@@ -60,68 +77,31 @@ def redis_url() -> Iterator[str]:
             pytest.exit("TEST_REDIS_URL must select a non-zero database, e.g. /15", returncode=2)
         yield explicit
         return
-    try:
-        from testcontainers.community.redis import RedisContainer  # noqa: PLC0415
-
-        container = RedisContainer("redis:7.4-alpine")
-        container.start()
-    except Exception as exc:
-        pytest.skip(f"No TEST_REDIS_URL and Docker unavailable: {type(exc).__name__}")
-    try:
-        host = container.get_container_host_ip()
-        port = container.get_exposed_port(6379)
-        yield f"redis://{host}:{port}/0"
-    finally:
-        container.stop()
-
-
-@pytest.fixture(scope="session")
-def migrated_database(database_url: str) -> str:
-    config = Config(str(ALEMBIC_INI))
-    config.attributes["database_url"] = database_url
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
-    return database_url
+    yield None  # in-process state (single instance), which the app supports
 
 
 @pytest.fixture
-async def engine(migrated_database: str) -> AsyncIterator[AsyncEngine]:
-    engine = create_async_engine(migrated_database)
+async def db(mongodb_uri: str) -> AsyncIterator[AsyncDatabase[dict[str, Any]]]:
+    client = create_client(mongodb_uri)
     try:
-        yield engine
+        yield client[TEST_DB]
     finally:
-        await engine.dispose()
+        await client.close()
 
-
-# ---------------------------------------------------------------------------
-# Full application harness: real PostgreSQL + Redis, fake Google + fake Drive.
-# ---------------------------------------------------------------------------
-
-from typing import Any  # noqa: E402
-
-import httpx  # noqa: E402
-from drive_fake import FakeDrive  # noqa: E402  (services/api/tests on pythonpath)
-from google_fake import CLIENT_ID, FakeGoogle  # noqa: E402
-
-from saige_api.auth.google import GoogleOAuthClient  # noqa: E402
-from saige_api.core.config import Environment, Settings  # noqa: E402
-from saige_api.crypto import generate_key  # noqa: E402
-from saige_api.main import create_app  # noqa: E402
-from saige_api.resources import Resources  # noqa: E402
 
 WEB = "http://web.test"
 REDIRECT_URI = f"{WEB}/api/v1/auth/google/callback"
-Harness = tuple[httpx.AsyncClient, FakeGoogle, FakeDrive]
+Harness = tuple[httpx.AsyncClient, FakeGoogle, MemoryObjectStore]
 
 
 @pytest.fixture
-def make_client(migrated_database: str, redis_url: str) -> Any:
+def make_client(mongodb_uri: str, redis_url: str | None) -> Any:
     async def _make(**overrides: Any) -> AsyncIterator[Harness]:
         values: dict[str, Any] = {
             "app_env": Environment.TEST,
             "log_json": False,
             "log_level": "WARNING",
-            "database_url": migrated_database,
+            "mongodb_uri": mongodb_uri,
             "redis_url": redis_url,
             "jwt_secret": "j" * 48,
             "token_encryption_key": generate_key(),
@@ -133,13 +113,15 @@ def make_client(migrated_database: str, redis_url: str) -> Any:
             "auth_rate_limit_per_minute": 1000,
             "password_breach_check": False,  # no network in tests
         }
+        storage = overrides.pop("storage", True)
         values.update(overrides)
         settings = Settings(_env_file=None, **values)  # type: ignore[call-arg]
-        google, drive = FakeGoogle(), FakeDrive()
+        google, objects = FakeGoogle(), MemoryObjectStore()
 
         def factory(s: Settings) -> Resources:
             resources = Resources.create(s)
-            resources.external_http = httpx.AsyncClient(transport=google.transport(drive))
+            resources.objects = objects if storage else None
+            resources.external_http = httpx.AsyncClient(transport=google.transport())
             if s.google_oauth_configured:
                 resources.google = GoogleOAuthClient(
                     client_id=CLIENT_ID,
@@ -155,6 +137,6 @@ def make_client(migrated_database: str, redis_url: str) -> Any:
                 await app.state.resources.redis.flushdb()
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url=WEB) as client:
-                yield client, google, drive
+                yield client, google, objects
 
     return _make

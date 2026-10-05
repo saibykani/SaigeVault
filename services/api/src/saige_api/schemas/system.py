@@ -55,5 +55,7 @@ class SystemInfoResponse(BaseModel):
     ai_processing_policy: Literal["disabled", "local_only", "third_party_allowed"]
     google_oauth_configured: bool
     dev_login_enabled: bool = False
-    google_drive_available: bool = False
+    storage_available: bool = Field(
+        default=False, description="Uploads are possible (Cloudflare R2 configured)"
+    )
     password_login_enabled: bool = True

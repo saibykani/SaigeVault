@@ -6,9 +6,6 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.142",
     "uvicorn[standard]>=0.54",
-    "sqlalchemy[asyncio]>=2.1",
-    "asyncpg>=0.31",
-    "alembic>=1.20",
     "pydantic>=2.13",
     "pydantic-settings>=2.15",
     "structlog>=26.1",
@@ -20,6 +17,8 @@ dependencies = [
     "python-multipart>=0.0.32",
     "saige-ai",
     "argon2-cffi>=25.1",
+    "pymongo>=4.13",
+    "boto3>=1.40",
 ]
 
 [project.scripts]

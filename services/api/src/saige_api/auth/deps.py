@@ -16,29 +16,29 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, Request
-from sqlalchemy import select
 
-from saige_api.api.deps import ResourcesDep, SessionDep
+from saige_api.api.deps import DbDep, ResourcesDep
 from saige_api.auth.cookies import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from saige_api.auth.sessions import SessionService
 from saige_api.auth.tokens import InvalidTokenError
 from saige_api.core.errors import ForbiddenError, UnauthorizedError
-from saige_api.models import User
-from saige_api.models.enums import UserStatus
+from saige_api.db import Doc
+from saige_api.enums import UserStatus
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 @dataclass(frozen=True, slots=True)
 class AuthContext:
-    user: User
+    user: Doc
     session_id: uuid.UUID
     via_cookie: bool
     access_expires_at: datetime
 
     @property
     def user_id(self) -> uuid.UUID:
-        return self.user.id
+        user_id: uuid.UUID = self.user.id
+        return user_id
 
 
 def _bearer_token(request: Request) -> str | None:
@@ -54,9 +54,7 @@ def verify_csrf(request: Request) -> None:
         raise ForbiddenError("Missing or invalid CSRF token")
 
 
-async def get_current_user(
-    request: Request, resources: ResourcesDep, db: SessionDep
-) -> AuthContext:
+async def get_current_user(request: Request, resources: ResourcesDep, db: DbDep) -> AuthContext:
     token = _bearer_token(request)
     via_cookie = token is None
     if token is None:
@@ -71,13 +69,10 @@ async def get_current_user(
     sessions = SessionService(db, refresh_ttl=resources.refresh_ttl)
     if not await sessions.is_active(claims.user_id, claims.session_id):
         raise UnauthorizedError("Session has ended")
-    user = await db.scalar(
-        select(User).where(
-            User.id == claims.user_id,
-            User.deleted_at.is_(None),
-            User.status == UserStatus.ACTIVE,
-        )
+    raw = await db.users.find_one(
+        {"_id": claims.user_id, "deleted_at": None, "status": UserStatus.ACTIVE.value}
     )
+    user = Doc(raw) if raw is not None else None
     if user is None:
         raise UnauthorizedError("Account unavailable")
     if via_cookie and request.method not in SAFE_METHODS:

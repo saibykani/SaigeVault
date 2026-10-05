@@ -1,23 +1,18 @@
-"""Vault file management end-to-end (real PostgreSQL + Redis, fake Google + Drive)."""
+"""Vault file management end-to-end (real MongoDB, in-memory object store for R2)."""
 
 from __future__ import annotations
 
 import hashlib
 import uuid
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from drive_fake import FakeDrive
-from google_fake import FakeGoogle
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from pymongo.asynchronous.database import AsyncDatabase
 
 pytestmark = pytest.mark.integration
 
 WEB = "http://web.test"
-DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj << >> endobj\ntrailer\n%%EOF\n"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 128
 
@@ -26,21 +21,9 @@ def csrf(client: httpx.AsyncClient) -> dict[str, str]:
     return {"X-CSRF-Token": client.cookies.get("saige_csrf", "")}
 
 
-async def signed_in_with_drive(client: httpx.AsyncClient, google: FakeGoogle) -> None:
+async def signed_in(client: httpx.AsyncClient, *_: Any) -> None:
     email = f"files-{uuid.uuid4().hex[:8]}@example.com"
     assert (await client.post("/api/v1/auth/dev-login", json={"email": email})).status_code == 200
-    start = await client.get("/api/v1/storage/google-drive/connect")
-    query = parse_qs(urlparse(start.headers["location"]).query)
-    google.granted_scope = f"openid email {DRIVE_SCOPE}"
-    google.issue_refresh_token = True
-    google.identity["sub"] = f"sub-{uuid.uuid4().hex}"
-    google.identity["email"] = email
-    code = uuid.uuid4().hex
-    google.codes[code] = query["nonce"][0]
-    done = await client.get(
-        "/api/v1/auth/google/callback", params={"code": code, "state": query["state"][0]}
-    )
-    assert "drive=connected" in done.headers["location"]
 
 
 async def upload(
@@ -64,9 +47,11 @@ async def listing(client: httpx.AsyncClient, **params: Any) -> dict[str, Any]:
     return response.json()  # type: ignore[no-any-return]
 
 
-async def test_upload_validates_stores_and_lists(make_client: Any, engine: AsyncEngine) -> None:
-    async for client, google, drive in make_client():
-        await signed_in_with_drive(client, google)
+async def test_upload_validates_stores_and_lists(
+    make_client: Any, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    async for client, _google, drive in make_client():
+        await signed_in(client)
         response = await upload(client, "Payslip August 2026.pdf")
         assert response.status_code == 201, response.text
         body = response.json()
@@ -75,30 +60,18 @@ async def test_upload_validates_stores_and_lists(make_client: Any, engine: Async
         assert body["processing_status"] == "pending"
         assert body["size_bytes"] == len(PDF)
 
-        stored = [f for f in drive.files.values() if f.name == "Payslip August 2026.pdf"]
-        assert len(stored) == 1 and stored[0].content == PDF
-        root = next(f for f in drive.files.values() if f.app_properties)
-        assert stored[0].parents == [root.id]
-
         names = [f["name"] for f in (await listing(client))["files"]]
         assert names == ["Payslip August 2026.pdf"]
-        async with engine.connect() as db:
-            row = (
-                await db.execute(
-                    text("SELECT checksum FROM files WHERE id = :id"), {"id": body["id"]}
-                )
-            ).one()
-            versions = await db.scalar(
-                text("SELECT count(*) FROM file_versions WHERE file_id = :id"), {"id": body["id"]}
-            )
-            audited = await db.scalar(
-                text(
-                    "SELECT count(*) FROM audit_logs WHERE action='FILE_UPLOAD' AND resource_id=:id"
-                ),
-                {"id": body["id"]},
-            )
-        assert row.checksum == hashlib.sha256(PDF).hexdigest()
-        assert versions == 1 and audited == 1
+        row = await db.files.find_one({"_id": uuid.UUID(body["id"])})
+        assert row is not None
+        assert row["checksum"] == hashlib.sha256(PDF).hexdigest()
+        # R2 layout: {category}/{user_id}/{file_id}.{ext}
+        assert row["object_key"] == f"documents/{row['user_id']}/{body['id']}.pdf"
+        assert drive.objects[row["object_key"]][0] == PDF
+        audited = await db.audit_logs.count_documents(
+            {"action": "FILE_UPLOAD", "resource_id": row["_id"]}
+        )
+        assert audited == 1
 
 
 @pytest.mark.parametrize(
@@ -112,35 +85,35 @@ async def test_upload_validates_stores_and_lists(make_client: Any, engine: Async
 async def test_upload_rejections_store_nothing(
     make_client: Any, name: str, data: bytes, status: int, code: str
 ) -> None:
-    async for client, google, drive in make_client():
-        await signed_in_with_drive(client, google)
-        before = set(drive.files)
+    async for client, _google, drive in make_client():
+        await signed_in(client)
+        before = set(drive.objects)
         response = await upload(client, name, data)
         assert response.status_code == status, response.text
         assert response.json()["error"]["code"] == code
-        assert set(drive.files) == before
+        assert set(drive.objects) == before
         assert (await listing(client))["total"] == 0
 
 
 async def test_upload_size_limit_enforced_before_reading(make_client: Any) -> None:
-    async for client, google, _drive in make_client(max_upload_bytes=1024):
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client(max_upload_bytes=1024):
+        await signed_in(client)
         response = await upload(client, "big.pdf", PDF + b"\x00" * (200 * 1024))
         assert response.status_code == 413
         assert response.json()["error"]["code"] == "file_too_large"
 
 
-async def test_upload_requires_connected_storage(make_client: Any) -> None:
-    async for client, _google, _drive in make_client():
-        await client.post("/api/v1/auth/dev-login", json={"email": "nodrive@example.com"})
+async def test_upload_requires_configured_storage(make_client: Any) -> None:
+    async for client, _google, _drive in make_client(storage=False):
+        await client.post("/api/v1/auth/dev-login", json={"email": "nostorage@example.com"})
         response = await upload(client)
-        assert response.status_code == 409
-        assert response.json()["error"]["code"] == "storage_not_connected"
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "storage_not_configured"
 
 
 async def test_download_and_preview_headers(make_client: Any) -> None:
-    async for client, google, _drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client():
+        await signed_in(client)
         pdf_id = (await upload(client, "Résumé 2026.pdf")).json()["id"]
         text_id = (await upload(client, "notes.md", b"# <script>alert(1)</script>")).json()["id"]
 
@@ -165,8 +138,8 @@ async def test_download_and_preview_headers(make_client: Any) -> None:
 
 
 async def test_folders_breadcrumbs_and_moves(make_client: Any) -> None:
-    async for client, google, drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client():
+        await signed_in(client)
         career = (
             await client.post("/api/v1/folders", json={"name": "Career"}, headers=csrf(client))
         ).json()
@@ -192,9 +165,6 @@ async def test_folders_breadcrumbs_and_moves(make_client: Any) -> None:
         )  # fmt: skip
         assert renamed.json()["name"] == "Offer Letter.pdf"
         assert renamed.json()["folder_id"] is None
-        drive_file = next(f for f in drive.files.values() if f.name == "Offer Letter.pdf")
-        root_drive = next(f for f in drive.files.values() if f.app_properties)
-        assert drive_file.parents == [root_drive.id]
 
         cycle = await client.patch(
             f"/api/v1/folders/{career['id']}",
@@ -213,10 +183,11 @@ async def test_folders_breadcrumbs_and_moves(make_client: Any) -> None:
 
 
 async def test_trash_restore_and_permanent_delete(make_client: Any) -> None:
-    async for client, google, drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, drive in make_client():
+        await signed_in(client)
         file_id = (await upload(client)).json()["id"]
-        storage_ids = {f.id for f in drive.files.values() if f.name == "Resume.pdf"}
+        stored = set(drive.objects)
+        assert len(stored) == 1
 
         early = await client.delete(f"/api/v1/files/{file_id}/permanent", headers=csrf(client))
         assert early.status_code == 409  # must be trashed first
@@ -226,20 +197,20 @@ async def test_trash_restore_and_permanent_delete(make_client: Any) -> None:
         assert (await listing(client))["total"] == 0
         trashed = await listing(client, trashed="true")
         assert [f["id"] for f in trashed["files"]] == [file_id]
-        assert all(drive.files[i].trashed for i in storage_ids)
+        assert set(drive.objects) == stored  # trash keeps content
 
         restored = await client.post(f"/api/v1/files/{file_id}/restore", headers=csrf(client))
         assert restored.status_code == 200 and restored.json()["deleted_at"] is None
         await client.delete(f"/api/v1/files/{file_id}", headers=csrf(client))
         gone = await client.delete(f"/api/v1/files/{file_id}/permanent", headers=csrf(client))
         assert gone.status_code == 204
-        assert not storage_ids & set(drive.files)
+        assert not drive.objects  # permanent delete removes it from storage
         assert (await client.get(f"/api/v1/files/{file_id}")).status_code == 404
 
 
 async def test_star_classify_tag_and_filter(make_client: Any) -> None:
-    async for client, google, _drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client():
+        await signed_in(client)
         a = (await upload(client, "Resume.pdf")).json()["id"]
         b = (await upload(client, "shot.png", PNG)).json()["id"]
         assert (await client.get(f"/api/v1/files/{b}")).json()["document_type"] == "image"
@@ -275,8 +246,8 @@ async def test_star_classify_tag_and_filter(make_client: Any) -> None:
 
 
 async def test_collections(make_client: Any) -> None:
-    async for client, google, _drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client():
+        await signed_in(client)
         f1 = (await upload(client, "Degree.pdf")).json()["id"]
         f2 = (await upload(client, "Diploma.pdf")).json()["id"]
         made = await client.post(
@@ -310,8 +281,8 @@ async def test_collections(make_client: Any) -> None:
 
 
 async def test_bulk_actions_skip_foreign_files(make_client: Any) -> None:
-    async for client, google, _drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client():
+        await signed_in(client)
         ids = [(await upload(client, f"doc{i}.pdf")).json()["id"] for i in range(3)]
         foreign = str(uuid.uuid4())
         result = await client.post(
@@ -331,8 +302,8 @@ async def test_bulk_actions_skip_foreign_files(make_client: Any) -> None:
 
 
 async def test_other_users_cannot_touch_my_files(make_client: Any) -> None:
-    async for client, google, drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, google, _drive in make_client():
+        await signed_in(client)
         file_id = (await upload(client)).json()["id"]
         folder_id = (
             await client.post("/api/v1/folders", json={"name": "Private"}, headers=csrf(client))
@@ -342,7 +313,7 @@ async def test_other_users_cannot_touch_my_files(make_client: Any) -> None:
         ).json()["id"]
 
         intruder = httpx.AsyncClient(transport=client._transport, base_url=WEB)
-        await signed_in_with_drive(intruder, google)
+        await signed_in(intruder, google)
         h = csrf(intruder)
         checks = [
             await intruder.get(f"/api/v1/files/{file_id}"),
@@ -369,12 +340,11 @@ async def test_other_users_cannot_touch_my_files(make_client: Any) -> None:
 
         mine = (await client.get(f"/api/v1/files/{file_id}")).json()
         assert mine["name"] == "Resume.pdf" and mine["deleted_at"] is None
-        assert isinstance(drive, FakeDrive)
 
 
 async def test_mutations_require_csrf(make_client: Any) -> None:
-    async for client, google, _drive in make_client():
-        await signed_in_with_drive(client, google)
+    async for client, _google, _drive in make_client():
+        await signed_in(client)
         file_id = (await upload(client)).json()["id"]
         no_csrf = [
             await client.post("/api/v1/files", files={"file": ("a.pdf", PDF, "application/pdf")}),

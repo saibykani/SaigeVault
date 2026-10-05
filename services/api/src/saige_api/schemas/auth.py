@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field
 
-from saige_api.models.enums import ClientPlatform
+from saige_api.enums import ClientPlatform
 
 
 class UserProfile(BaseModel):
@@ -46,7 +47,7 @@ class DevLoginRequest(BaseModel):
 class RefreshRequest(BaseModel):
     """Body form for non-browser clients. Browsers send the refresh cookie instead."""
 
-    refresh_token: str | None = Field(default=None, max_length=256)
+    refresh_token: str | None = Field(default=None, max_length=1024)
 
 
 class TokenPair(BaseModel):
@@ -69,13 +70,13 @@ class RefreshResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=1024)
     display_name: str | None = Field(default=None, max_length=200)
 
 
 class PasswordLoginRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class MfaLoginRequest(BaseModel):
@@ -103,13 +104,13 @@ class SecurityOverview(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str | None = Field(
-        default=None, max_length=256, description="Required when a password is already set"
+        default=None, max_length=1024, description="Required when a password is already set"
     )
-    new_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=1, max_length=1024)
 
 
 class StepUpRequest(BaseModel):
-    password: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class TotpSetupResponse(BaseModel):
@@ -122,9 +123,16 @@ class TotpCodeRequest(BaseModel):
 
 
 class TotpDisableRequest(BaseModel):
-    password: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=1024)
     code: str = Field(min_length=6, max_length=32)
 
 
 class RecoveryCodesResponse(BaseModel):
     recovery_codes: list[str] = Field(description="Shown once. Each works a single time.")
+
+
+def user_profile(user: Any) -> UserProfile:
+    """Profile from a user document (attribute access, `id` maps to `_id`)."""
+    return UserProfile(
+        id=user.id, email=user.email, display_name=user.display_name, avatar_url=user.avatar_url
+    )
