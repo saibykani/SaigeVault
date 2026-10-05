@@ -77,3 +77,20 @@ async def test_failed_code_exchange() -> None:
     with pytest.raises(GoogleAuthError) as excinfo:
         await make_client(FakeGoogle()).exchange_code("unknown-code", "verifier")
     assert excinfo.value.code == "code_exchange_failed"
+
+
+@pytest.mark.parametrize("google_error", ["invalid_grant", "unauthorized_client"])
+async def test_refresh_needing_new_consent_is_distinguished(google_error: str) -> None:
+    """A grant from a replaced OAuth client must ask for reconnect, not look like an outage."""
+    from saige_api.auth.google import GoogleAuthError, GoogleOAuthClient  # noqa: PLC0415
+
+    transport = httpx.MockTransport(lambda _r: httpx.Response(400, json={"error": google_error}))
+    client = GoogleOAuthClient(
+        client_id="id",
+        client_secret="secret",
+        redirect_uri="http://web.test/cb",
+        http=httpx.AsyncClient(transport=transport),
+    )
+    with pytest.raises(GoogleAuthError) as caught:
+        await client.refresh_access_token("old-refresh-token")
+    assert caught.value.code == "invalid_grant"

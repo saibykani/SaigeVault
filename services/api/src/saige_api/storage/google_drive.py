@@ -123,6 +123,7 @@ class GoogleDriveStorageProvider:
                 response = await self._http.send(build(token))
             except httpx.HTTPError as exc:
                 if attempt == MAX_ATTEMPTS:
+                    logger.warning("drive_unreachable", error=type(exc).__name__)
                     raise StorageUnavailableError("drive unreachable") from exc
                 await self._backoff(attempt)
                 continue
@@ -166,6 +167,7 @@ class GoogleDriveStorageProvider:
                 raise StorageAuthError("drive scope missing; reconnect required")
             raise StoragePermissionError("drive permission denied")
         if status >= 500 or status == 429:
+            logger.warning("drive_unavailable", status=status, reasons=sorted(reasons))
             raise StorageUnavailableError("drive unavailable")
         raise StorageError(f"drive request failed ({status})")
 

@@ -30,6 +30,7 @@ page.on("pageerror", (e) => console.error("pageerror", e.message));
 
 await page.goto(`${BASE}/login`);
 await page.getByRole("button", { name: "Create an account" }).click();
+await page.locator("#pw-name").fill("E2E Tester");
 await page.locator("#pw-email").fill(email);
 await page.getByLabel("Password", { exact: true }).fill("short");
 await page.screenshot({ path: `${out}/pw-01-register.png` });

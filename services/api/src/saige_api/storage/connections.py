@@ -122,6 +122,7 @@ class ConnectionTokenSource:
                 row.status = StorageConnectionStatus.NEEDS_REAUTH
                 logger.info("storage_reauth_required", connection_id=str(row.id))
                 return None, StorageAuthError("access revoked")
+            logger.warning("storage_token_refresh_failed", reason=exc.code)
             return None, StorageUnavailableError("token refresh failed")
         store_tokens(self._cipher, row, tokens)
         assert row.access_token_expires_at is not None  # noqa: S101 - set by store_tokens

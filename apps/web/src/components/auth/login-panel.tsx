@@ -4,7 +4,7 @@ import { FlaskConical, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
-import { PasswordForm } from "@/components/auth/password-form";
+import { type Mode, PasswordForm } from "@/components/auth/password-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,6 +57,9 @@ export function LoginPanel() {
   const { data: info, isLoading, isError, failureCount, refetch } = useSystemInfo();
   const devLogin = useDevLogin();
   const [email, setEmail] = useState("");
+  const [mode, setMode] = useState<Mode>(
+    params.get("mode") === "register" ? "register" : "sign-in",
+  );
 
   const googleHref = `/api/v1/auth/google/login?next=${encodeURIComponent(next)}`;
 
@@ -67,10 +70,14 @@ export function LoginPanel() {
   }
 
   return (
-    <div className="rounded-xl border bg-card p-6 shadow-sm">
-      <h1 className="text-lg font-semibold tracking-tight">Sign in to your vault</h1>
+    <div className="rounded-2xl border bg-card p-7 shadow-sm">
+      <h1 className="text-xl font-semibold tracking-tight">
+        {mode === "register" ? "Create your account" : "Welcome back"}
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Continue with Google, or use your email and password.
+        {mode === "register"
+          ? "Your private vault for every document."
+          : "Sign in to continue to your vault."}
       </p>
 
       {errorCode ? (
@@ -104,7 +111,7 @@ export function LoginPanel() {
           </Button>
         </div>
       ) : info?.google_oauth_configured ? (
-        <Button asChild variant="outline" className="mt-6 w-full">
+        <Button asChild variant="outline" size="lg" className="mt-6 w-full rounded-full">
           <a href={googleHref}>
             <GoogleIcon />
             Continue with Google
@@ -127,10 +134,10 @@ export function LoginPanel() {
         <>
           <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
-            or
+            or use email
             <span className="h-px flex-1 bg-border" />
           </div>
-          <PasswordForm next={next} />
+          <PasswordForm next={next} mode={mode} onModeChange={setMode} />
         </>
       ) : null}
 

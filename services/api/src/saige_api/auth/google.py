@@ -17,6 +17,10 @@ from urllib.parse import urlencode
 import httpx
 import jwt
 
+from saige_api.core.logging import get_logger
+
+logger = get_logger("saige_api.auth.google")
+
 AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"  # noqa: S105 - URL, not a secret
 JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs"
@@ -143,7 +147,13 @@ class GoogleOAuthClient:
                 if response.headers.get("content-type", "").startswith("application/json")
                 else {}
             )
-            if body.get("error") == "invalid_grant":
+            google_error = str(body.get("error", ""))
+            # Logged for diagnosis; Google's error codes contain no secrets.
+            logger.warning("google_token_error", error=google_error, status=response.status_code)
+            # unauthorized_client: the grant belongs to a different OAuth client
+            # (e.g. the client was replaced). Like invalid_grant, only a fresh
+            # consent fixes it.
+            if google_error in {"invalid_grant", "unauthorized_client"}:
                 raise GoogleAuthError(invalid_grant_code or error_code)
             raise GoogleAuthError(error_code)
         payload: dict[str, Any] = response.json()

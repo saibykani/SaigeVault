@@ -9,7 +9,7 @@ import { useCompleteMfaLogin, usePasswordLogin, useRegister } from "@/lib/api";
 
 export const MIN_PASSWORD_LENGTH = 12;
 
-type Mode = "sign-in" | "register";
+export type Mode = "sign-in" | "register";
 
 function errorText(error: unknown): string | null {
   if (!error) return null;
@@ -63,8 +63,16 @@ export function PasswordField({
   );
 }
 
-export function PasswordForm({ next }: { next: string }) {
-  const [mode, setMode] = useState<Mode>("sign-in");
+export function PasswordForm({
+  next,
+  mode,
+  onModeChange,
+}: {
+  next: string;
+  mode: Mode;
+  onModeChange: (mode: Mode) => void;
+}) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaToken, setMfaToken] = useState<string | null>(null);
@@ -81,7 +89,11 @@ export function PasswordForm({ next }: { next: string }) {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (mode === "register") {
-      await register.mutateAsync({ email: email.trim(), password });
+      await register.mutateAsync({
+        email: email.trim(),
+        password,
+        ...(name.trim() ? { display_name: name.trim() } : {}),
+      });
       done();
       return;
     }
@@ -160,6 +172,20 @@ export function PasswordForm({ next }: { next: string }) {
   const active = mode === "register" ? register : login;
   return (
     <form onSubmit={(e) => void onSubmit(e).catch(() => undefined)} className="space-y-3">
+      {mode === "register" ? (
+        <div>
+          <label htmlFor="pw-name" className="mb-1 block text-xs font-medium">
+            Full name
+          </label>
+          <Input
+            id="pw-name"
+            autoComplete="name"
+            maxLength={200}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+      ) : null}
       <div>
         <label htmlFor="pw-email" className="mb-1 block text-xs font-medium">
           Email
@@ -185,8 +211,7 @@ export function PasswordForm({ next }: { next: string }) {
       />
       {mode === "register" ? (
         <p className="text-xs text-muted-foreground">
-          At least {MIN_PASSWORD_LENGTH} characters. A few random words (e.g. “plum orbit kettle
-          47”) is strong and easy to remember. Passwords found in known data breaches are refused.
+          {MIN_PASSWORD_LENGTH}–128 characters. A few random words is strong and easy to remember.
         </p>
       ) : null}
       {active.isError ? (
@@ -194,7 +219,7 @@ export function PasswordForm({ next }: { next: string }) {
           {errorText(active.error)}
         </p>
       ) : null}
-      <Button type="submit" className="w-full" disabled={active.isPending}>
+      <Button type="submit" size="lg" className="w-full rounded-full" disabled={active.isPending}>
         {active.isPending ? <Loader2 className="animate-spin" /> : null}
         {mode === "register" ? "Create account" : "Sign in"}
       </Button>
@@ -206,7 +231,7 @@ export function PasswordForm({ next }: { next: string }) {
           onClick={() => {
             login.reset();
             register.reset();
-            setMode(mode === "register" ? "sign-in" : "register");
+            onModeChange(mode === "register" ? "sign-in" : "register");
           }}
         >
           {mode === "register" ? "Sign in" : "Create an account"}
