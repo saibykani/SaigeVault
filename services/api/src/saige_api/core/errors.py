@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pymongo.errors import ConnectionFailure, PyMongoError, ServerSelectionTimeoutError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from saige_api.core.logging import get_logger
@@ -92,6 +93,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
         return error_response(request, exc.status_code, exc.code, exc.message, exc.details)
+
+    @app.exception_handler(PyMongoError)
+    async def _database_error(request: Request, exc: PyMongoError) -> JSONResponse:
+        # Never echo driver messages: they can contain hostnames or credentials.
+        logger.error("database_error", error=type(exc).__name__)
+        if isinstance(exc, (ConnectionFailure, ServerSelectionTimeoutError)):
+            return error_response(
+                request, status.HTTP_503_SERVICE_UNAVAILABLE, "database_unavailable",
+                "The database isn't reachable right now. Please try again shortly.",
+            )  # fmt: skip
+        return error_response(
+            request, status.HTTP_500_INTERNAL_SERVER_ERROR, "database_error",
+            "A database error occurred.",
+        )  # fmt: skip
 
     @app.exception_handler(StorageError)
     async def _storage_error(request: Request, exc: StorageError) -> JSONResponse:

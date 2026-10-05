@@ -56,10 +56,13 @@ class MongoCheck:
     name = "database"
     critical = True
 
-    def __init__(self, db: AsyncDatabase[dict[str, Any]]) -> None:
+    def __init__(self, db: AsyncDatabase[dict[str, Any]], *, default_uri: bool = False) -> None:
         self._db = db
+        self._default_uri = default_uri
 
     async def check(self) -> str | None:
+        if self._default_uri:
+            raise HealthCheckFailedError("MONGODB_URI is not set (using localhost)")
         await self._db.command("ping")
         return "mongodb"
 

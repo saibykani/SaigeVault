@@ -128,7 +128,10 @@ class Resources:
                 else None
             ),
         )
-        checks: list[HealthCheck] = [MongoCheck(resources.db)]
+        default_uri = "localhost" in uri or "127.0.0.1" in uri
+        checks: list[HealthCheck] = [
+            MongoCheck(resources.db, default_uri=default_uri and settings.is_production)
+        ]
         if objects is not None:
             checks.append(StorageCheck(objects))
         if redis is not None:
