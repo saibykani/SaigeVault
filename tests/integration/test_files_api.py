@@ -352,3 +352,16 @@ async def test_mutations_require_csrf(make_client: Any) -> None:
             await client.delete(f"/api/v1/files/{file_id}"),
         ]
         assert [r.status_code for r in no_csrf] == [403, 403, 403]
+
+
+async def test_content_stored_in_mongodb_gridfs(make_client: Any) -> None:
+    """Default storage when no R2/S3 is configured: content lives in MongoDB."""
+    async for client, _google, _objects in make_client(storage="gridfs"):
+        await signed_in(client)
+        big = PDF + b"%" * (3 * 1024 * 1024)  # several GridFS chunks
+        file_id = (await upload(client, "Big.pdf", big)).json()["id"]
+        content = await client.get(f"/api/v1/files/{file_id}/content")
+        assert content.status_code == 200 and content.content == big
+        await client.delete(f"/api/v1/files/{file_id}", headers=csrf(client))
+        gone = await client.delete(f"/api/v1/files/{file_id}/permanent", headers=csrf(client))
+        assert gone.status_code == 204

@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     r2_endpoint: str | None = None
     # Development/test only: keep files in memory when R2 isn't configured.
     memory_storage: bool = False
+    # Without R2/S3 settings, file content is stored in MongoDB (GridFS).
+    # Set to false to disable uploads unless R2/S3 is configured.
+    mongodb_file_storage: bool = True
 
     # Optional. Without Redis, short-lived state is kept in-process, which is
     # only correct for a single API instance (fine for one free container).
@@ -171,7 +174,11 @@ class Settings(BaseSettings):
 
     @property
     def storage_available(self) -> bool:
-        return self.r2_configured or (self.memory_storage and not self.is_production)
+        return (
+            self.r2_configured
+            or (self.memory_storage and not self.is_production)
+            or self.mongodb_file_storage
+        )
 
     @property
     def google_oauth_configured(self) -> bool:

@@ -26,7 +26,7 @@ from saige_api.crypto import generate_key
 from saige_api.db import create_client
 from saige_api.main import create_app
 from saige_api.resources import Resources
-from saige_api.storage.objects import MemoryObjectStore
+from saige_api.storage.objects import MemoryObjectStore, MongoObjectStore
 
 TEST_DB = "saige_test"
 
@@ -120,7 +120,10 @@ def make_client(mongodb_uri: str, redis_url: str | None) -> Any:
 
         def factory(s: Settings) -> Resources:
             resources = Resources.create(s)
-            resources.objects = objects if storage else None
+            if storage == "gridfs":
+                resources.objects = MongoObjectStore(resources.db)
+            else:
+                resources.objects = objects if storage else None
             resources.external_http = httpx.AsyncClient(transport=google.transport())
             if s.google_oauth_configured:
                 resources.google = GoogleOAuthClient(

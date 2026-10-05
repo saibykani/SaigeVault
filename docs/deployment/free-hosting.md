@@ -5,7 +5,7 @@
 | Web app | Vercel | Pages; proxies `/api/*` to the API |
 | API | Render (Docker) | Saige backend |
 | Database | MongoDB Atlas (M0) | Users, sessions, file details (name, type, size, R2 key, dates), folders, tags, collections, audit log |
-| Files | Cloudflare R2 (10 GB free) | File content, under `documents/`, `images/`, `certificates/`, `resumes/` and `other/` |
+| Files | **MongoDB (default, nothing to set up)**, or any S3-compatible storage (Backblaze B2, Cloudflare R2…) | File content, keyed `documents/`, `images/`, `certificates/`, `resumes/`, `other/` |
 | Redis (optional) | Upstash | Rate limits and sign-in state. Without it these are kept in-process, which is fine for one instance |
 
 ## 1. MongoDB Atlas
@@ -17,7 +17,9 @@
 
 Saige creates its indexes automatically when it starts.
 
-## 2. Cloudflare R2
+## 2. File storage (optional)
+
+With no `R2_*` settings, files are stored in MongoDB (GridFS) — nothing to set up, but the Atlas free tier is 512 MB in total. For more space, use any S3-compatible service: set `R2_ENDPOINT` (e.g. `https://s3.us-east-005.backblazeb2.com` for Backblaze B2, 10 GB free, no card), `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`. Cloudflare R2 steps:
 
 1. In the Cloudflare dashboard, open **R2 Object Storage** and create a bucket named `saige-vault`. Keep it private, with no public access.
 2. Click **Manage API tokens → Create API token**. Choose **Object Read & Write**, limited to that bucket.

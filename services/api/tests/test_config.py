@@ -60,9 +60,10 @@ def test_production_rejects_dev_login() -> None:
         )
 
 
-def test_storage_needs_r2_settings_or_memory_mode() -> None:
-    assert not make_settings().storage_available
-    assert make_settings(memory_storage=True).storage_available
+def test_storage_defaults_to_mongodb_unless_disabled() -> None:
+    assert make_settings().storage_available  # GridFS in the same database
+    assert not make_settings(mongodb_file_storage=False).storage_available
+    assert make_settings(mongodb_file_storage=False, memory_storage=True).storage_available
     r2 = make_settings(
         r2_account_id="acc", r2_access_key_id="k", r2_secret_access_key="s", r2_bucket="b"
     )

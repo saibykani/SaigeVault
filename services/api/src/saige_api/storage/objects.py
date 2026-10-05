@@ -114,3 +114,48 @@ class MemoryObjectStore:
 
     async def ping(self) -> None:
         return None
+
+
+class MongoObjectStore:
+    """File content in MongoDB GridFS (the `files_content` bucket).
+
+    Needs no extra account: it uses the same database as the metadata. Good for
+    small vaults (the Atlas free tier is 512 MB in total).
+    """
+
+    name = "mongodb"
+
+    def __init__(self, db: Any) -> None:
+        from gridfs import AsyncGridFSBucket  # noqa: PLC0415
+
+        self._bucket = AsyncGridFSBucket(db, bucket_name="files_content")
+
+    async def put(self, key: str, stream: BinaryIO, *, size: int, content_type: str) -> None:
+        stream.seek(0)
+        await self._bucket.upload_from_stream(
+            key, stream, chunk_size_bytes=CHUNK // 4, metadata={"content_type": content_type}
+        )
+
+    async def get(self, key: str) -> AsyncIterator[bytes]:
+        from gridfs.errors import NoFile  # noqa: PLC0415
+
+        try:
+            download = await self._bucket.open_download_stream_by_name(key)
+        except NoFile as exc:
+            raise StorageNotFoundError("object not found") from exc
+        try:
+            while chunk := await download.read(CHUNK):
+                yield chunk
+        finally:
+            await download.close()
+
+    async def delete(self, key: str) -> None:
+        from gridfs.errors import NoFile  # noqa: PLC0415
+
+        try:
+            await self._bucket.delete_by_name(key)
+        except NoFile:
+            return
+
+    async def ping(self) -> None:
+        return None

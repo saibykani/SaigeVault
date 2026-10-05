@@ -23,7 +23,7 @@ from saige_api.health import HealthCheck, MongoCheck, QdrantCheck, RedisCheck, S
 from saige_api.kv import KeyValueStore, MemoryStore, RedisStore
 from saige_api.ratelimit import RateLimiter
 from saige_api.storage.base import ObjectStore
-from saige_api.storage.objects import MemoryObjectStore, R2ObjectStore
+from saige_api.storage.objects import MemoryObjectStore, MongoObjectStore, R2ObjectStore
 
 logger = get_logger("saige_api.resources")
 
@@ -37,7 +37,7 @@ def _signing_key(settings: Settings) -> str:
     return secrets.token_urlsafe(48)
 
 
-def _object_store(settings: Settings) -> ObjectStore | None:
+def _object_store(settings: Settings, db: Any) -> ObjectStore | None:
     if settings.r2_configured:
         assert settings.r2_secret_access_key is not None  # noqa: S101 - checked by r2_configured
         endpoint = settings.r2_endpoint or (
@@ -49,9 +49,12 @@ def _object_store(settings: Settings) -> ObjectStore | None:
             secret_access_key=settings.r2_secret_access_key.get_secret_value(),
             bucket=settings.r2_bucket or "",
         )
-    if settings.storage_available:
+    if settings.memory_storage and not settings.is_production:
         logger.warning("memory_storage", reason="R2 not configured; files are kept in memory")
         return MemoryObjectStore()
+    if settings.mongodb_file_storage:
+        logger.info("mongodb_storage", reason="R2/S3 not configured; files are stored in MongoDB")
+        return MongoObjectStore(db)
     logger.warning("storage_disabled", reason="R2 not configured; uploads are unavailable")
     return None
 
@@ -104,11 +107,12 @@ class Resources:
                 redirect_uri=settings.google_redirect_uri or "",
                 http=external_http,
             )
-        objects = _object_store(settings)
+        db = mongo[database_name(uri)]
+        objects = _object_store(settings, db)
         resources = cls(
             settings=settings,
             mongo=mongo,
-            db=mongo[database_name(uri)],
+            db=db,
             objects=objects,
             redis=redis,
             kv=kv,
