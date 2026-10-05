@@ -81,3 +81,10 @@ def test_hosted_database_urls_are_normalized(raw: str, expected: str) -> None:
 def test_non_postgres_database_url_rejected() -> None:
     with pytest.raises(ValidationError, match="PostgreSQL"):
         make_settings(database_url="mysql://u:p@localhost/db")
+
+
+def test_redis_is_off_unless_configured() -> None:
+    """Hosts without Redis (single free instance) must not fall back to localhost."""
+    assert make_settings().redis_url is None
+    assert make_settings(redis_url="").redis_url is None
+    assert make_settings(redis_url="rediss://default:x@h.upstash.io:6379").redis_url

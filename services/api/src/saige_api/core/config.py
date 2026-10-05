@@ -75,7 +75,7 @@ class Settings(BaseSettings):
 
     # Optional. Without Redis, short-lived state is kept in-process, which is
     # only correct for a single API instance (fine for one free container).
-    redis_url: str | None = "redis://localhost:6379/0"
+    redis_url: str | None = None
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: SecretStr | None = None
