@@ -15,3 +15,4 @@ Each ADR records one significant decision: its context, the decision, and its co
 | [0009](0009-sessions-and-same-origin-proxy.md) | Rotating refresh-token sessions behind a same-origin proxy | Accepted |
 | [0010](0010-drive-scope-and-token-encryption.md) | `drive.file` scope, separate consent, and AES-GCM token encryption | Accepted |
 | [0011](0011-upload-validation-and-content-serving.md) | Content-based upload validation and sandboxed content serving | Accepted |
+| [0012](0012-password-sign-in-and-totp.md) | Email + password sign-in (Argon2id) with optional TOTP | Accepted |

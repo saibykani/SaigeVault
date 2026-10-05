@@ -19,6 +19,7 @@ dependencies = [
     "email-validator>=2.2",
     "python-multipart>=0.0.32",
     "saige-ai",
+    "argon2-cffi>=25.1",
 ]
 
 [project.scripts]

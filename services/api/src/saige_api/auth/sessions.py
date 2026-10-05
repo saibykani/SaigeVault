@@ -29,6 +29,8 @@ class RevokeReason(StrEnum):
     LOGOUT = "logout"
     USER_REVOKED = "user_revoked"
     REUSE_DETECTED = "reuse_detected"
+    PASSWORD_CHANGED = "password_changed"  # noqa: S105 - a reason label, not a secret
+    ACCOUNT_SECURED = "account_secured"
 
 
 class RefreshOutcome(StrEnum):
@@ -133,6 +135,19 @@ class SessionService:
                 UserSession.family_id == family_id,
                 UserSession.revoked_at.is_(None),
             )
+            .values(revoked_at=func.now(), revoked_reason=reason.value)
+        )
+        return int(getattr(result, "rowcount", 0) or 0)
+
+    async def revoke_all(
+        self, user_id: uuid.UUID, reason: RevokeReason, *, except_family: uuid.UUID | None = None
+    ) -> int:
+        conditions = [UserSession.user_id == user_id, UserSession.revoked_at.is_(None)]
+        if except_family is not None:
+            conditions.append(UserSession.family_id != except_family)
+        result = await self._db.execute(
+            update(UserSession)
+            .where(*conditions)
             .values(revoked_at=func.now(), revoked_reason=reason.value)
         )
         return int(getattr(result, "rowcount", 0) or 0)

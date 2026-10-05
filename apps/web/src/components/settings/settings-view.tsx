@@ -10,6 +10,7 @@ import { useMounted } from "@/components/shell/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AccountSecurity } from "@/components/settings/account-security";
 import { DriveConnection } from "@/components/settings/drive-connection";
 import { SessionsList } from "@/components/settings/sessions-list";
 import { useSystemInfo } from "@/lib/api";
@@ -119,8 +120,9 @@ export function SettingsView() {
       <Section
         id="security"
         title="Security"
-        description="Devices signed in to your vault. Revoke any you don't recognise."
+        description="Password, two-step verification, and the devices signed in to your vault. Revoke any you don't recognise."
       >
+        <AccountSecurity />
         <SessionsList />
       </Section>
 

@@ -21,6 +21,7 @@ class KeyValueStore(Protocol):
         ...
 
     async def set(self, key: str, value: str, *, ttl_seconds: int) -> None: ...
+    async def get(self, key: str) -> str | None: ...
     async def pop(self, key: str) -> str | None: ...
     async def incr(self, key: str, *, ttl_seconds: int) -> int: ...
 
@@ -33,6 +34,12 @@ class RedisStore:
 
     async def set(self, key: str, value: str, *, ttl_seconds: int) -> None:
         await self._redis.set(key, value, ex=ttl_seconds)
+
+    async def get(self, key: str) -> str | None:
+        raw = await cast(Awaitable[bytes | str | None], self._redis.get(key))
+        if raw is None:
+            return None
+        return raw.decode() if isinstance(raw, bytes) else raw
 
     async def pop(self, key: str) -> str | None:
         raw = await cast(Awaitable[bytes | str | None], self._redis.getdel(key))
@@ -83,6 +90,10 @@ class MemoryStore:
     async def set(self, key: str, value: str, *, ttl_seconds: int) -> None:
         self._purge()
         self._data[key] = (value, self._now() + ttl_seconds)
+
+    async def get(self, key: str) -> str | None:
+        entry = self._live(key)
+        return entry[0] if entry else None
 
     async def pop(self, key: str) -> str | None:
         entry = self._live(key)

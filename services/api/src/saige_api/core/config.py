@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     # Development-only email login (no Google). Refused in production.
     dev_login_enabled: bool = False
     auth_rate_limit_per_minute: int = Field(default=20, ge=1)
+    # Email + password sign-in (Argon2id, optional TOTP). On by default.
+    password_login_enabled: bool = True
+    # Reject passwords seen in data breaches (Have I Been Pwned, k-anonymity:
+    # only the first 5 hex characters of a SHA-1 hash are sent).
+    password_breach_check: bool = True
+    registrations_per_hour_per_ip: int = Field(default=10, ge=1)
 
     # Least privilege by default: Saige only sees files it created (its own
     # "Saige Vault" folder), never the rest of the user's Drive.

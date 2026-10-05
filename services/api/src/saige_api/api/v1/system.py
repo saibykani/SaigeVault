@@ -21,4 +21,5 @@ async def system_info(resources: ResourcesDep) -> SystemInfoResponse:
         google_oauth_configured=settings.google_oauth_configured,
         dev_login_enabled=settings.dev_login_enabled and not settings.is_production,
         google_drive_available=settings.google_drive_available,
+        password_login_enabled=settings.password_login_enabled,
     )

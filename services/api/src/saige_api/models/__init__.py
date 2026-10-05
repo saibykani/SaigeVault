@@ -26,7 +26,14 @@ from saige_api.models.files import (
     Folder,
     Tag,
 )
-from saige_api.models.identity import ApiKey, OAuthAccount, StorageConnection, User, UserSession
+from saige_api.models.identity import (
+    ApiKey,
+    OAuthAccount,
+    PasswordCredential,
+    StorageConnection,
+    User,
+    UserSession,
+)
 from saige_api.models.system import (
     GLOBAL_OR_NULLABLE_USER_TABLES,
     AuditLog,
@@ -62,6 +69,7 @@ __all__ = [
     "Folder",
     "Notification",
     "OAuthAccount",
+    "PasswordCredential",
     "SearchHistory",
     "SecurityEvent",
     "StorageConnection",

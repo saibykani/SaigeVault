@@ -4,7 +4,9 @@ import {
   ApiError,
   createApiClient,
   createAuthFetch,
+  type PasswordLoginResponse,
   type ReadinessResponse,
+  type SecurityOverview,
   type SessionResponse,
   type SessionSummary,
   type StorageConnectionSummary,
@@ -39,6 +41,7 @@ export const queryKeys = {
   systemInfo: ["system", "info"] as const,
   session: ["auth", "session"] as const,
   sessions: ["auth", "sessions"] as const,
+  security: ["auth", "security"] as const,
   storageConnections: ["storage", "connections"] as const,
   storageQuota: (id: string) => ["storage", "quota", id] as const,
 };
@@ -148,6 +151,96 @@ export function useDevLogin() {
       if (!data) throw ApiError.fromResponse(response.status, error);
       return data;
     },
+  });
+}
+
+// -- email + password -----------------------------------------------------------
+
+export function useRegister() {
+  return useMutation({
+    mutationFn: async (input: { email: string; password: string; display_name?: string }) => {
+      const { data, error, response } = await api.POST("/api/v1/auth/register", { body: input });
+      if (!data) throw ApiError.fromResponse(response.status, error);
+      return data;
+    },
+  });
+}
+
+export function usePasswordLogin() {
+  return useMutation({
+    mutationFn: async (input: { email: string; password: string }) => {
+      const { data, error, response } = await api.POST("/api/v1/auth/login", { body: input });
+      if (!data) throw ApiError.fromResponse(response.status, error);
+      return data as PasswordLoginResponse;
+    },
+  });
+}
+
+export function useCompleteMfaLogin() {
+  return useMutation({
+    mutationFn: async (input: { mfa_token: string; code: string }) => {
+      const { data, error, response } = await api.POST("/api/v1/auth/login/mfa", { body: input });
+      if (!data) throw ApiError.fromResponse(response.status, error);
+      return data as PasswordLoginResponse;
+    },
+  });
+}
+
+export function useSecurityOverview() {
+  return useQuery({
+    queryKey: queryKeys.security,
+    queryFn: async (): Promise<SecurityOverview> => {
+      const { data, error, response } = await api.GET("/api/v1/auth/security");
+      if (data) return data;
+      throw ApiError.fromResponse(response.status, error);
+    },
+  });
+}
+
+function useSecurityMutation<TInput, TOutput>(run: (input: TInput) => Promise<TOutput>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: run,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.security });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useSecurityMutation(async (input: { current_password?: string; new_password: string }) => {
+    const { error, response } = await api.PUT("/api/v1/auth/password", { body: input });
+    if (!response.ok) throw ApiError.fromResponse(response.status, error);
+  });
+}
+
+export function useTotpSetup() {
+  return useMutation({
+    mutationFn: async (password: string) => {
+      const { data, error, response } = await api.POST("/api/v1/auth/mfa/totp/setup", {
+        body: { password },
+      });
+      if (!data) throw ApiError.fromResponse(response.status, error);
+      return data;
+    },
+  });
+}
+
+export function useTotpEnable() {
+  return useSecurityMutation(async (code: string) => {
+    const { data, error, response } = await api.POST("/api/v1/auth/mfa/totp/enable", {
+      body: { code },
+    });
+    if (!data) throw ApiError.fromResponse(response.status, error);
+    return data.recovery_codes;
+  });
+}
+
+export function useTotpDisable() {
+  return useSecurityMutation(async (input: { password: string; code: string }) => {
+    const { error, response } = await api.POST("/api/v1/auth/mfa/totp/disable", { body: input });
+    if (!response.ok) throw ApiError.fromResponse(response.status, error);
   });
 }
 

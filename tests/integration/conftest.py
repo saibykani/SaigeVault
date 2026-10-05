@@ -131,6 +131,7 @@ def make_client(migrated_database: str, redis_url: str) -> Any:
             "google_redirect_uri": REDIRECT_URI,
             "dev_login_enabled": True,
             "auth_rate_limit_per_minute": 1000,
+            "password_breach_check": False,  # no network in tests
         }
         values.update(overrides)
         settings = Settings(_env_file=None, **values)  # type: ignore[call-arg]

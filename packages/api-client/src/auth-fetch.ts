@@ -11,6 +11,13 @@ export const CSRF_COOKIE = "saige_csrf";
 export const CSRF_HEADER = "X-CSRF-Token";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const AUTH_PATH = "/api/v1/auth/";
+/** Signed-in account endpoints under AUTH_PATH that should refresh like any other call. */
+const REFRESHABLE_AUTH_PATHS = [
+  "/api/v1/auth/sessions",
+  "/api/v1/auth/security",
+  "/api/v1/auth/password",
+  "/api/v1/auth/mfa/",
+];
 const REFRESH_PATH = "/api/v1/auth/refresh";
 
 export interface AuthFetchOptions {
@@ -71,7 +78,9 @@ export function createAuthFetch({
   return async function authFetch(request: Request): Promise<Response> {
     const retry = request.clone();
     const response = await baseFetch(withCsrf(request));
-    const isAuthCall = new URL(request.url, "http://local").pathname.startsWith(AUTH_PATH);
+    const path = new URL(request.url, "http://local").pathname;
+    const isAuthCall =
+      path.startsWith(AUTH_PATH) && !REFRESHABLE_AUTH_PATHS.some((p) => path.startsWith(p));
     if (response.status !== 401 || isAuthCall) return response;
 
     if (await refreshOnce()) return baseFetch(withCsrf(retry));

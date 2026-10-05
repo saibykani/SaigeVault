@@ -78,6 +78,7 @@ def main() -> None:
         "dev_login_enabled": True,
         "auth_rate_limit_per_minute": 1000,
         "upload_rate_limit_per_minute": 1000,
+        "password_breach_check": False,  # no real network in e2e
     }
     settings = Settings(_env_file=None, **values)  # type: ignore[call-arg]
 

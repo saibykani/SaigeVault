@@ -56,3 +56,4 @@ class SystemInfoResponse(BaseModel):
     google_oauth_configured: bool
     dev_login_enabled: bool = False
     google_drive_available: bool = False
+    password_login_enabled: bool = True

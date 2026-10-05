@@ -4,6 +4,7 @@ import { FlaskConical, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
+import { PasswordForm } from "@/components/auth/password-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,7 +70,7 @@ export function LoginPanel() {
     <div className="rounded-xl border bg-card p-6 shadow-sm">
       <h1 className="text-lg font-semibold tracking-tight">Sign in to your vault</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Use the Google account whose Drive will hold your documents.
+        Continue with Google, or use your email and password.
       </p>
 
       {errorCode ? (
@@ -122,6 +123,17 @@ export function LoginPanel() {
         </>
       )}
 
+      {info?.password_login_enabled ? (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            or
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <PasswordForm next={next} />
+        </>
+      ) : null}
+
       {info?.dev_login_enabled ? (
         <form onSubmit={onDevLogin} className="mt-6 border-t pt-5">
           <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-warning">
@@ -161,8 +173,8 @@ export function LoginPanel() {
         </li>
         <li className="flex gap-2">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          Sign-in only asks Google for your name and email. Drive access is a separate, explicit
-          step.
+          Passwords are hashed with Argon2id, and repeated wrong guesses lock the account. Two-step
+          verification is available in Settings.
         </li>
       </ul>
     </div>

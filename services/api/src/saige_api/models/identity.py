@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     DateTime,
     Index,
     LargeBinary,
@@ -48,6 +49,32 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         str_enum(UserStatus, "user_status"), nullable=False, default=UserStatus.ACTIVE
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set once an identity provider (Google) has proven ownership of `email`.
+    # Password sign-up alone never sets it.
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class PasswordCredential(UUIDPrimaryKeyMixin, UserOwnedMixin, TimestampMixin, Base):
+    """Email + password sign-in and optional TOTP second factor (one per user).
+
+    Only an Argon2id hash of the password is stored. The TOTP secret is
+    encrypted with the application key; recovery codes are stored hashed.
+    """
+
+    __tablename__ = "password_credentials"
+    __table_args__ = (tenant_key("password_credentials"), UniqueConstraint("user_id"))
+
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    encrypted_totp_secret: Mapped[bytes | None] = mapped_column(LargeBinary)
+    totp_key_version: Mapped[int | None] = mapped_column()
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    totp_last_used_step: Mapped[int | None] = mapped_column(BigInteger)
+    recovery_code_hashes: Mapped[list[str]] = mapped_column(
+        ARRAY(String(64)), nullable=False, default=list
+    )
 
 
 class UserSession(UUIDPrimaryKeyMixin, UserOwnedMixin, TimestampMixin, Base):

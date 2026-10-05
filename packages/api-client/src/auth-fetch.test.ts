@@ -112,4 +112,27 @@ describe("createAuthFetch", () => {
     await authFetch(new Request(`${BASE}/api/v1/auth/session`));
     expect(fetchMock).toHaveBeenCalledOnce();
   });
+
+  it("refreshes signed-in account endpoints but not sign-in ones", async () => {
+    const paths: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL((input as Request).url).pathname;
+      paths.push(path);
+      return path === "/api/v1/auth/refresh" ? json(200) : json(401);
+    });
+    const authFetch = createAuthFetch({
+      baseUrl: BASE,
+      fetch: fetchMock as typeof fetch,
+      getCsrfToken: () => "t",
+    });
+    await authFetch(new Request(`${BASE}/api/v1/auth/security`));
+    expect(paths).toEqual([
+      "/api/v1/auth/security",
+      "/api/v1/auth/refresh",
+      "/api/v1/auth/security",
+    ]);
+    paths.length = 0;
+    await authFetch(new Request(`${BASE}/api/v1/auth/login`, { method: "POST", body: "{}" }));
+    expect(paths).toEqual(["/api/v1/auth/login"]);
+  });
 });
