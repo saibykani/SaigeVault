@@ -13,6 +13,10 @@ const BACKEND_CODES = [
   "account_mismatch",
   "signed_out",
   "drive_not_configured",
+  "storage_api_disabled",
+  "storage_permission_denied",
+  "storage_reauth_required",
+  "storage_unavailable",
 ];
 
 describe("Drive connection", () => {

@@ -21,10 +21,12 @@ from typing import Any, Protocol
 
 import httpx
 
+from saige_api.core.logging import get_logger
 from saige_api.models.enums import StorageProviderKind
 from saige_api.storage.base import (
     ChangePage,
     ListPage,
+    StorageApiDisabledError,
     StorageAuthError,
     StorageChange,
     StorageError,
@@ -50,6 +52,10 @@ RESUMABLE_CHUNK = 8 * 1024 * 1024  # multiple of 256 KiB, as Drive requires
 MAX_ATTEMPTS = 4
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
 _RATE_LIMIT_REASONS = {"rateLimitExceeded", "userRateLimitExceeded", "backendError"}
+_API_DISABLED_REASONS = {"accessNotConfigured", "SERVICE_DISABLED"}
+_SCOPE_REASONS = {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
+
+logger = get_logger("saige_api.storage.google_drive")
 
 
 class AccessTokenSource(Protocol):
@@ -83,12 +89,14 @@ def to_item(data: dict[str, Any]) -> StorageItem:
     )
 
 
-def _error_reason(response: httpx.Response) -> str:
+def _error_reasons(response: httpx.Response) -> set[str]:
+    """Reasons from both Drive's legacy `errors` list and the newer `details` list."""
     try:
-        errors = response.json().get("error", {}).get("errors", [])
-        return str(errors[0].get("reason", "")) if errors else ""
-    except (ValueError, AttributeError):
-        return ""
+        error = response.json().get("error", {})
+        entries = [*error.get("errors", []), *error.get("details", [])]
+        return {str(e["reason"]) for e in entries if isinstance(e, dict) and e.get("reason")}
+    except (ValueError, AttributeError, TypeError):
+        return set()
 
 
 class GoogleDriveStorageProvider:
@@ -131,7 +139,7 @@ class GoogleDriveStorageProvider:
     def _retryable(response: httpx.Response) -> bool:
         if response.status_code in {429, 500, 502, 503, 504}:
             return True
-        return response.status_code == 403 and _error_reason(response) in _RATE_LIMIT_REASONS
+        return response.status_code == 403 and bool(_error_reasons(response) & _RATE_LIMIT_REASONS)
 
     async def _backoff(self, attempt: int) -> None:
         ceiling = min(16.0, 0.5 * 2 ** (attempt - 1))
@@ -142,14 +150,20 @@ class GoogleDriveStorageProvider:
         status = response.status_code
         if status < 400:
             return
-        reason = _error_reason(response)
+        reasons = _error_reasons(response)
         if status == 401:
             raise StorageAuthError("drive authorization failed")
         if status == 404:
             raise StorageNotFoundError("item not found")
-        if status == 403 and reason in {"storageQuotaExceeded", "quotaExceeded"}:
-            raise StorageQuotaExceededError("drive storage quota exceeded")
         if status == 403:
+            # Google's reason codes are not sensitive and make misconfiguration diagnosable.
+            logger.warning("drive_forbidden", reasons=sorted(reasons))
+            if reasons & {"storageQuotaExceeded", "quotaExceeded"}:
+                raise StorageQuotaExceededError("drive storage quota exceeded")
+            if reasons & _API_DISABLED_REASONS:
+                raise StorageApiDisabledError("drive api not enabled for this project")
+            if reasons & _SCOPE_REASONS:
+                raise StorageAuthError("drive scope missing; reconnect required")
             raise StoragePermissionError("drive permission denied")
         if status >= 500 or status == 429:
             raise StorageUnavailableError("drive unavailable")

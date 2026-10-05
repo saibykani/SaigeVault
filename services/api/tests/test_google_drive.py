@@ -8,8 +8,10 @@ from drive_fake import FakeDrive, StaticTokens
 
 from saige_api.storage import google_drive as gd
 from saige_api.storage.base import (
+    StorageApiDisabledError,
     StorageAuthError,
     StorageNotFoundError,
+    StoragePermissionError,
     StorageUnavailableError,
 )
 from saige_api.storage.google_drive import GoogleDriveStorageProvider
@@ -126,6 +128,34 @@ async def test_revoked_credentials_raise_auth_error() -> None:
 async def test_rate_limits_and_server_errors_are_retried() -> None:
     fake = FakeDrive(inject_statuses=[429, 403, 503])
     assert (await provider(fake).quota()).usage_bytes == 1048576
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        # What Google returns when the Drive API is disabled in the Cloud project.
+        (
+            {
+                "code": 403,
+                "errors": [{"reason": "accessNotConfigured"}],
+                "details": [{"reason": "SERVICE_DISABLED"}],
+            },
+            StorageApiDisabledError,
+        ),
+        ({"details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}, StorageAuthError),
+        ({"errors": [{"reason": "forbidden"}]}, StoragePermissionError),
+        ({}, StoragePermissionError),
+    ],
+)
+async def test_forbidden_reasons_are_distinguished(
+    body: dict[str, object], expected: type[Exception]
+) -> None:
+    transport = httpx.MockTransport(lambda _req: httpx.Response(403, json={"error": body}))
+    drive = GoogleDriveStorageProvider(
+        httpx.AsyncClient(transport=transport), StaticTokens("t"), sleep=no_sleep
+    )
+    with pytest.raises(expected):
+        await drive.quota()
 
 
 async def test_persistent_outage_surfaces_as_unavailable() -> None:

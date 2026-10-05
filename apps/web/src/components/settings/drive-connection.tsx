@@ -35,6 +35,11 @@ export const DRIVE_ERROR_MESSAGES: Record<string, string> = {
   signed_out: "Your session ended during connection. Sign in and try again.",
   drive_not_configured: "Google Drive isn't configured on this server.",
   invalid_state: "That connection link expired or was already used. Please try again.",
+  storage_api_disabled:
+    "The Google Drive API isn't enabled in this app's Google Cloud project. Enable it, then connect again.",
+  storage_permission_denied: "Google Drive refused access. Please try connecting again.",
+  storage_reauth_required: "Google didn't accept the Drive credentials. Please connect again.",
+  storage_unavailable: "Google Drive is temporarily unavailable. Try again shortly.",
 };
 
 function GoogleDriveIcon({ className }: { className?: string }) {

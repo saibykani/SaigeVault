@@ -42,6 +42,12 @@ class StoragePermissionError(StorageError):
     code = "storage_permission_denied"
 
 
+class StorageApiDisabledError(StorageError):
+    """The Google Cloud project behind the OAuth client hasn't enabled the Drive API."""
+
+    code = "storage_api_disabled"
+
+
 @dataclass(frozen=True, slots=True)
 class StorageItem:
     id: str
