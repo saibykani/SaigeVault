@@ -28,7 +28,7 @@ dev = [
     "ruff>=0.16",
     "mypy>=2.3",
     "testcontainers[mongodb,redis]>=4.15",
-    "psycopg[binary]>=3.3",
+    "psycopg[binary]>=3.3.6",
     "pip-audit>=2.9",
 ]
 
